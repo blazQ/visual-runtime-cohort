@@ -6,10 +6,10 @@
 #include <vulkan/vulkan_metal.h>
 #endif
 #if defined(__linux__)
-#include <vulkan/vulkan_wayland.h>
-#include <vulkan/vulkan_xcb.h>
 #include <wayland-client.h>
 #include <xcb/xcb.h>
+#include <vulkan/vulkan_wayland.h>
+#include <vulkan/vulkan_xcb.h>
 #endif
 
 #include <cstdio>
