@@ -5,6 +5,7 @@
 #include "vulkan_utils.hpp"
 
 #include <glm/mat4x4.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <vulkan/vulkan.h>
 
@@ -39,6 +40,8 @@ struct RendererBackend {
   void resize(uint32_t width, uint32_t height);
   void render_frame(float t);
   void shutdown();
+  void set_background_color(float r, float g, float b);
+  void set_view(float pan_x, float pan_y, float zoom);
 
 private:
   bool create_command_pool();
@@ -78,6 +81,14 @@ private:
   VulkanPipeline pipeline_{};
   uint32_t render_width_ = 0;
   uint32_t render_height_ = 0;
+
+  float bg_r_ = 0.0f;
+  float bg_g_ = 0.0f;
+  float bg_b_ = 0.0f;
+
+  float pan_x_ = 0.0f;
+  float pan_y_ = 0.0f;
+  float zoom_ = 1.0f;
 };
 
 Renderer::Renderer() = default;
@@ -110,6 +121,19 @@ void Renderer::shutdown() {
     backend_.reset();
   }
 }
+
+void Renderer::set_background_color(float r, float g, float b) {
+  if (backend_) {
+    backend_->set_background_color(r, g, b);
+  }
+}
+
+void Renderer::set_view(float pan_x, float pan_y, float zoom) {
+  if (backend_) {
+    backend_->set_view(pan_x, pan_y, zoom);
+  }
+}
+
 
 bool RendererBackend::init(SurfaceDescriptor *surface) {
   shutdown();
@@ -261,6 +285,19 @@ void RendererBackend::shutdown() {
   context_.shutdown();
   render_width_ = 0;
   render_height_ = 0;
+}
+
+void RendererBackend::set_background_color(float r, float g, float b) {
+  bg_r_ = r;
+  bg_g_ = g;
+  bg_b_ = b;
+}
+
+void RendererBackend::set_view(float pan_x, float pan_y, float zoom) {
+  pan_x_ = pan_x;
+  pan_y_ = pan_y;
+  zoom_ = zoom;
+  update_frame_uniforms();
 }
 
 bool RendererBackend::create_command_pool() {
@@ -516,7 +553,7 @@ bool RendererBackend::record_clear_commands(uint32_t image_index) {
   color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  color_attachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+  color_attachment.clearValue.color = {{bg_r_, bg_g_, bg_b_, 1.0f}};
 
   VkRenderingInfo rendering_info{};
   rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -585,13 +622,14 @@ void RendererBackend::update_frame_uniforms() {
     const float aspect =
         static_cast<float>(render_width_) / static_cast<float>(render_height_);
 
-    if (aspect >= 1.0f) {
-      uniforms.matrix[0][0] = 1.0f / aspect;
-    } else {
-      uniforms.matrix[1][1] = aspect;
-    }
+    // Aspect correction + Vulkan y-flip (NDC y points down)
+    const float sx = (aspect >= 1.0f) ? (1.0f / aspect) : 1.0f;
+    const float sy = (aspect >= 1.0f) ? -1.0f : -aspect;
+
+    uniforms.matrix = glm::scale(glm::mat4{1.0f}, glm::vec3(sx, sy, 1.0f));
+    uniforms.matrix = glm::scale(uniforms.matrix, glm::vec3(zoom_, zoom_, 1.0f));
+    uniforms.matrix = glm::translate(uniforms.matrix, glm::vec3(-pan_x_, -pan_y_, 0.0f));
   }
-  uniforms.matrix[1][1] *= -1.0f;
 
   void *data = nullptr;
   if (!check_vk(vkMapMemory(context_.device(), frame_uniform_buffer_memory_, 0,
@@ -602,6 +640,7 @@ void RendererBackend::update_frame_uniforms() {
   std::memcpy(data, &uniforms, sizeof(uniforms));
   vkUnmapMemory(context_.device(), frame_uniform_buffer_memory_);
 }
+
 
 void RendererBackend::destroy_pipeline() { pipeline_.destroy(context_); }
 

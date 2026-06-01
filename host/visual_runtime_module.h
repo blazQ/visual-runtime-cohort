@@ -65,6 +65,16 @@ struct VisualRuntimeModule {
     initialized_ = false;
   }
 
+  void setBackgroundColor(const BackgroundColor &color) const {
+    if (initialized_ && api_.set_background_color)
+      api_.set_background_color(&state_, &color);
+  }
+
+  void setView(const ViewState &view) const {
+    if (initialized_ && api_.set_view)
+      api_.set_view(&state_, &view);
+  }
+
   uint64_t frameCount() const { return state_.frame_count; }
 
   const char *backendName() const {

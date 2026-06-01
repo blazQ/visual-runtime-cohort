@@ -31,6 +31,20 @@ static void visual_runtime_shutdown_impl(VisualRuntimeState *) {
   g_renderer.shutdown();
 }
 
+static void visual_runtime_set_background_color_impl(VisualRuntimeState *,
+                                                     const BackgroundColor *color) {
+  if(color){
+    g_renderer.set_background_color(color->r, color->g, color->b);
+  }                                              
+}
+
+static void visual_runtime_set_view_impl(VisualRuntimeState *,
+                                         const ViewState *view) {
+  if (view) {
+    g_renderer.set_view(view->pan_x, view->pan_y, view->zoom);
+  }
+}
+
 extern "C" {
 
 const VisualRuntimeAPI *visual_runtime_get_api() {
@@ -39,6 +53,8 @@ const VisualRuntimeAPI *visual_runtime_get_api() {
       VISUAL_RUNTIME_BACKEND_NAME,  visual_runtime_init_impl,
       visual_runtime_resize_impl,   visual_runtime_update_impl,
       visual_runtime_shutdown_impl,
+      visual_runtime_set_background_color_impl,
+      visual_runtime_set_view_impl,
   };
   return &api;
 }

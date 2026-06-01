@@ -24,7 +24,17 @@ struct SurfaceDescriptor {
   uint32_t height;
 };
 
-constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 4;
+struct ViewState {
+  float pan_x;
+  float pan_y;
+  float zoom;
+};
+
+struct BackgroundColor {
+  float r, g, b;
+};
+
+constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
 
 struct VisualRuntimeAPI {
   uint32_t abi_version;
@@ -35,6 +45,8 @@ struct VisualRuntimeAPI {
   void (*resize)(VisualRuntimeState *, uint32_t, uint32_t);
   void (*update)(VisualRuntimeState *, float);
   void (*shutdown)(VisualRuntimeState *);
+  void (*set_background_color)(VisualRuntimeState *, const BackgroundColor *);
+  void (*set_view)(VisualRuntimeState *, const ViewState *);
 };
 
 extern "C" {

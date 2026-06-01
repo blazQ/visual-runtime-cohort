@@ -20,6 +20,11 @@ namespace {
 
 struct AppState {
   VisualRuntimeModule *runtime = nullptr;
+  ViewState view{0.0f, 0.0f, 1.0f};
+  BackgroundColor bg{0.0f, 0.0f, 0.15f};
+  double last_mouse_x = 0.0;
+  double last_mouse_y = 0.0;
+  bool panning = false;
 };
 
 void glfw_error(int code, const char *description) {
@@ -42,6 +47,44 @@ void framebuffer_resized(GLFWwindow *window, int width, int height) {
                          static_cast<uint32_t>(height));
   std::fprintf(stderr, "[glfw-minimal] resized to %dx%d\n", width, height);
 }
+
+void on_scroll(GLFWwindow *window, double /*dx*/, double dy) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state || !state->runtime) return;
+
+  state->view.zoom *= (dy > 0) ? 1.1f : (1.0f / 1.1f);
+  state->runtime->setView(state->view);
+}
+
+void on_mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
+  if (button != GLFW_MOUSE_BUTTON_LEFT) return;
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state) return;
+  state->panning = (action == GLFW_PRESS);
+  if (state->panning)
+    glfwGetCursorPos(window, &state->last_mouse_x, &state->last_mouse_y);
+}
+
+void on_cursor_pos(GLFWwindow *window, double x, double y) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state || !state->runtime || !state->panning) return;
+
+  int w, h;
+  glfwGetFramebufferSize(window, &w, &h);
+  const float ref = static_cast<float>(std::min(w, h));
+
+  const double dx = x - state->last_mouse_x;
+  const double dy = y - state->last_mouse_y;
+  state->last_mouse_x = x;
+  state->last_mouse_y = y;
+
+  // Convert pixel delta → canvas units: NDC range is 2 (-1..1), ref is the
+  // shorter dimension (matches aspect-correction in the shader).
+  state->view.pan_x -= static_cast<float>(2.0 * dx / ref) / state->view.zoom;
+  state->view.pan_y += static_cast<float>(2.0 * dy / ref) / state->view.zoom;
+  state->runtime->setView(state->view);
+}
+
 
 #if defined(__linux__)
 #if defined(VRT_GLFW_HAS_NATIVE_WAYLAND)
@@ -197,13 +240,15 @@ int main() {
   AppState state{&runtime};
   glfwSetWindowUserPointer(window, &state);
   glfwSetFramebufferSizeCallback(window, framebuffer_resized);
+  glfwSetScrollCallback(window, on_scroll);
+  glfwSetMouseButtonCallback(window, on_mouse_button);
+  glfwSetCursorPosCallback(window, on_cursor_pos);
 
   if (!attach_surface(window, runtime)) {
     glfwDestroyWindow(window);
     glfwTerminate();
     return 1;
   }
-
   using clock = std::chrono::steady_clock;
   auto last = clock::now();
 
@@ -215,6 +260,15 @@ int main() {
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
+
+    const float pan_speed = 0.8f;  // canvas units per second — tune to taste
+    if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) state.view.pan_x -= pan_speed * dt / state.view.zoom;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) state.view.pan_x += pan_speed * dt / state.view.zoom;
+    if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) state.view.pan_y += pan_speed * dt / state.view.zoom;
+    if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) state.view.pan_y -= pan_speed * dt / state.view.zoom;
+    runtime.setView(state.view);
+    runtime.setBackgroundColor(state.bg);
+
 
     runtime.tick(dt);
     glfwPollEvents();
