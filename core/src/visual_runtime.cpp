@@ -7,7 +7,7 @@ static const char *VERSION = "v1"; // change this to demonstrate hot reload
 
 class VisualRuntime {
 public:
-  explicit VisualRuntime(SurfaceDescriptor *surface) {
+  explicit VisualRuntime(VRTSurfaceDescriptor *surface) {
     renderer_.init(surface);
     std::printf("[visual-runtime %s] init\n", VERSION);
     std::fflush(stdout);
@@ -18,11 +18,9 @@ public:
   VisualRuntime(const VisualRuntime &) = delete;
   VisualRuntime &operator=(const VisualRuntime &) = delete;
 
-  void resize(const VisualRuntimeSurfaceMetrics &metrics) {
-    renderer_.resize(&metrics);
-  }
+  void resize(const VRTSurfaceMetrics &metrics) { renderer_.resize(&metrics); }
 
-  void change_view(const VisualRuntimeViewChange &change) {
+  void change_view(const VRTViewChange &change) {
     renderer_.change_view(&change);
   }
 
@@ -38,14 +36,14 @@ private:
   float elapsed_time_ = 0.0f;
 };
 
-static VisualRuntime *runtime(VisualRuntimeState *state) {
+static VisualRuntime *runtime(VRTState *state) {
   return state ? static_cast<VisualRuntime *>(state->runtime) : nullptr;
 }
 
-static void visual_runtime_shutdown_impl(VisualRuntimeState *state);
+static void visual_runtime_shutdown_impl(VRTState *state);
 
-static void visual_runtime_init_impl(VisualRuntimeState *state,
-                                     SurfaceDescriptor *surface) {
+static void visual_runtime_init_impl(VRTState *state,
+                                     VRTSurfaceDescriptor *surface) {
   if (!state) {
     return;
   }
@@ -54,29 +52,27 @@ static void visual_runtime_init_impl(VisualRuntimeState *state,
   state->runtime = new VisualRuntime(surface);
 }
 
-static void
-visual_runtime_resize_impl(VisualRuntimeState *state,
-                           const VisualRuntimeSurfaceMetrics *metrics) {
+static void visual_runtime_resize_impl(VRTState *state,
+                                       const VRTSurfaceMetrics *metrics) {
   if (auto *rt = runtime(state); rt && metrics) {
     rt->resize(*metrics);
   }
 }
 
-static void
-visual_runtime_change_view_impl(VisualRuntimeState *state,
-                                const VisualRuntimeViewChange *change) {
+static void visual_runtime_change_view_impl(VRTState *state,
+                                            const VRTViewChange *change) {
   if (auto *rt = runtime(state); rt && change) {
     rt->change_view(*change);
   }
 }
 
-static void visual_runtime_update_impl(VisualRuntimeState *state, float dt) {
+static void visual_runtime_update_impl(VRTState *state, float dt) {
   if (auto *rt = runtime(state)) {
     rt->update(dt);
   }
 }
 
-static void visual_runtime_shutdown_impl(VisualRuntimeState *state) {
+static void visual_runtime_shutdown_impl(VRTState *state) {
   if (!state) {
     return;
   }
@@ -87,9 +83,9 @@ static void visual_runtime_shutdown_impl(VisualRuntimeState *state) {
 
 extern "C" {
 
-const VisualRuntimeAPI *visual_runtime_get_api() {
-  static const VisualRuntimeAPI api{
-      VISUAL_RUNTIME_API_VERSION,  sizeof(VisualRuntimeAPI),
+const VRTAPI *visual_runtime_get_api() {
+  static const VRTAPI api{
+      VISUAL_RUNTIME_API_VERSION,  sizeof(VRTAPI),
       VISUAL_RUNTIME_BACKEND_NAME, visual_runtime_init_impl,
       visual_runtime_resize_impl,  visual_runtime_change_view_impl,
       visual_runtime_update_impl,  visual_runtime_shutdown_impl,

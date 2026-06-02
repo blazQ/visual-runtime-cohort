@@ -15,8 +15,7 @@
 
 namespace {
 
-bool metrics_equal(const VisualRuntimeSurfaceMetrics &lhs,
-                   const VisualRuntimeSurfaceMetrics &rhs) {
+bool metrics_equal(const VRTSurfaceMetrics &lhs, const VRTSurfaceMetrics &rhs) {
   return lhs.pixel_width == rhs.pixel_width &&
          lhs.pixel_height == rhs.pixel_height &&
          lhs.screen_width == rhs.screen_width &&
@@ -46,9 +45,9 @@ void print_error(const char *context, NS::Error *error) {
 } // namespace
 
 struct RendererBackend {
-  bool init(SurfaceDescriptor *surface);
-  void resize(const VisualRuntimeSurfaceMetrics *metrics);
-  void change_view(const VisualRuntimeViewChange *change);
+  bool init(VRTSurfaceDescriptor *surface);
+  void resize(const VRTSurfaceMetrics *metrics);
+  void change_view(const VRTViewChange *change);
   void render_frame(float t);
   void shutdown();
 
@@ -57,8 +56,8 @@ private:
   bool build_geometry();
   bool build_uniforms();
   bool has_screen_metrics() const;
-  void apply_zoom(const VisualRuntimeViewChange &change);
-  void apply_pan(const VisualRuntimeViewChange &change);
+  void apply_zoom(const VRTViewChange &change);
+  void apply_pan(const VRTViewChange &change);
   void update_frame_uniforms();
 
   CA::MetalLayer *layer_ = nullptr;
@@ -69,7 +68,7 @@ private:
   MTL::Buffer *vertex_buffer_ = nullptr;
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
   NS::UInteger vertex_count_ = 0;
-  VisualRuntimeSurfaceMetrics metrics_{};
+  VRTSurfaceMetrics metrics_{};
   glm::dmat4 view_matrix_{1.0};
 };
 
@@ -78,20 +77,20 @@ Renderer::~Renderer() = default;
 Renderer::Renderer(Renderer &&) noexcept = default;
 Renderer &Renderer::operator=(Renderer &&) noexcept = default;
 
-bool Renderer::init(SurfaceDescriptor *surface) {
+bool Renderer::init(VRTSurfaceDescriptor *surface) {
   if (!backend_) {
     backend_ = std::make_unique<RendererBackend>();
   }
   return backend_->init(surface);
 }
 
-void Renderer::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+void Renderer::resize(const VRTSurfaceMetrics *metrics) {
   if (backend_) {
     backend_->resize(metrics);
   }
 }
 
-void Renderer::change_view(const VisualRuntimeViewChange *change) {
+void Renderer::change_view(const VRTViewChange *change) {
   if (backend_) {
     backend_->change_view(change);
   }
@@ -110,8 +109,8 @@ void Renderer::shutdown() {
   }
 }
 
-bool RendererBackend::init(SurfaceDescriptor *surface) {
-  if (!surface || surface->kind != SurfaceKind::MacOSMetalLayer ||
+bool RendererBackend::init(VRTSurfaceDescriptor *surface) {
+  if (!surface || surface->kind != VRTSurfaceKind::MacOSMetalLayer ||
       surface->surface_handle == 0)
     return false;
 
@@ -153,7 +152,7 @@ bool RendererBackend::init(SurfaceDescriptor *surface) {
   return true;
 }
 
-void RendererBackend::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
   if (!metrics) {
     return;
   }
@@ -165,19 +164,19 @@ void RendererBackend::resize(const VisualRuntimeSurfaceMetrics *metrics) {
   update_frame_uniforms();
 }
 
-void RendererBackend::change_view(const VisualRuntimeViewChange *change) {
+void RendererBackend::change_view(const VRTViewChange *change) {
   if (!change || change->reserved != 0 || !has_screen_metrics()) {
     return;
   }
 
   bool changed = false;
 
-  if ((change->flags & VisualRuntimeViewChange_Zoom) != 0) {
+  if ((change->flags & VRTViewChange_Zoom) != 0) {
     apply_zoom(*change);
     changed = true;
   }
 
-  if ((change->flags & VisualRuntimeViewChange_Pan) != 0) {
+  if ((change->flags & VRTViewChange_Pan) != 0) {
     apply_pan(*change);
     changed = true;
   }
@@ -191,7 +190,7 @@ bool RendererBackend::has_screen_metrics() const {
   return metrics_.screen_width > 0.0 && metrics_.screen_height > 0.0;
 }
 
-void RendererBackend::apply_zoom(const VisualRuntimeViewChange &change) {
+void RendererBackend::apply_zoom(const VRTViewChange &change) {
   const double scale = std::exp(change.zoom_delta_log_scale);
   const double anchor_x =
       (2.0 * change.zoom_anchor_x_screen / metrics_.screen_width) - 1.0;
@@ -205,7 +204,7 @@ void RendererBackend::apply_zoom(const VisualRuntimeViewChange &change) {
       view_matrix_;
 }
 
-void RendererBackend::apply_pan(const VisualRuntimeViewChange &change) {
+void RendererBackend::apply_pan(const VRTViewChange &change) {
   const double ndc_x = 2.0 * change.pan_x_screen / metrics_.screen_width;
   const double ndc_y = -2.0 * change.pan_y_screen / metrics_.screen_height;
 

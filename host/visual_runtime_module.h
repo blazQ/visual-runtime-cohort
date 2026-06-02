@@ -22,19 +22,19 @@ struct VisualRuntimeModule {
     return VisualRuntimeModule(DynamicLibrary::open(lib_path));
   }
 
-  void attachSurface(SurfaceDescriptor surface) {
+  void attachSurface(VRTSurfaceDescriptor surface) {
     surface_ = surface;
     has_surface_ = true;
     init();
   }
 
-  void resize(VisualRuntimeSurfaceMetrics metrics) {
+  void resize(VRTSurfaceMetrics metrics) {
     surface_.metrics = metrics;
     if (initialized_ && api_.resize)
       api_.resize(&state_, &surface_.metrics);
   }
 
-  void changeView(const VisualRuntimeViewChange &change) const {
+  void changeView(const VRTViewChange &change) const {
     if (initialized_ && api_.change_view)
       api_.change_view(&state_, &change);
   }
@@ -92,7 +92,7 @@ private:
     if (!get_api)
       return;
 
-    const VisualRuntimeAPI *loaded_api = get_api();
+    const VRTAPI *loaded_api = get_api();
     if (!loaded_api) {
       std::fprintf(
           stderr,
@@ -114,10 +114,10 @@ private:
   }
 
   DynamicLibrary lib_;
-  VisualRuntimeAPI api_;
+  VRTAPI api_;
   bool api_bound_ = false;
-  mutable VisualRuntimeState state_{};
-  mutable SurfaceDescriptor surface_{};
+  mutable VRTState state_{};
+  mutable VRTSurfaceDescriptor surface_{};
   bool has_surface_ = false;
   mutable bool initialized_ = false;
 };

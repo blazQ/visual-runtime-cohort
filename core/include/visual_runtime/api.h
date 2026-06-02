@@ -1,11 +1,11 @@
 #pragma once
 #include <cstdint>
 
-struct VisualRuntimeState {
+struct VRTState {
   void *runtime;
 };
 
-enum class SurfaceKind : uint32_t {
+enum class VRTSurfaceKind : uint32_t {
   None = 0,
   MacOSMetalLayer = 1,
   LinuxXcbWindow = 2,
@@ -16,7 +16,7 @@ enum class SurfaceKind : uint32_t {
 // Screen units are used by product-shaped view changes; pixel units are used
 // for graphics API drawable/swapchain sizing. On 1:1 platforms these values are
 // the same.
-struct VisualRuntimeSurfaceMetrics {
+struct VRTSurfaceMetrics {
   uint32_t pixel_width;
   uint32_t pixel_height;
   double screen_width;
@@ -25,10 +25,9 @@ struct VisualRuntimeSurfaceMetrics {
 
 #ifdef __cplusplus
 namespace visual_runtime {
-constexpr VisualRuntimeSurfaceMetrics metrics_1x(uint32_t width,
-                                                 uint32_t height) {
-  return VisualRuntimeSurfaceMetrics{width, height, static_cast<double>(width),
-                                     static_cast<double>(height)};
+constexpr VRTSurfaceMetrics metrics_1x(uint32_t width, uint32_t height) {
+  return VRTSurfaceMetrics{width, height, static_cast<double>(width),
+                           static_cast<double>(height)};
 }
 } // namespace visual_runtime
 #endif
@@ -36,17 +35,17 @@ constexpr VisualRuntimeSurfaceMetrics metrics_1x(uint32_t width,
 // Describes the native rendering surface passed to the visual runtime on init.
 // Handle fields are interpreted according to kind; null/zero for headless
 // hosts.
-struct SurfaceDescriptor {
-  SurfaceKind kind;
+struct VRTSurfaceDescriptor {
+  VRTSurfaceKind kind;
   void *display_handle;
   uintptr_t surface_handle;
-  VisualRuntimeSurfaceMetrics metrics;
+  VRTSurfaceMetrics metrics;
 };
 
-enum VisualRuntimeViewChangeFlags : uint32_t {
-  VisualRuntimeViewChange_None = 0,
-  VisualRuntimeViewChange_Pan = 1u << 0,
-  VisualRuntimeViewChange_Zoom = 1u << 1,
+enum VRTViewChangeFlags : uint32_t {
+  VRTViewChange_None = 0,
+  VRTViewChange_Pan = 1u << 0,
+  VRTViewChange_Zoom = 1u << 1,
 };
 
 // Product-shaped request to change the retained view intention. Screen values
@@ -55,7 +54,7 @@ enum VisualRuntimeViewChangeFlags : uint32_t {
 // logarithmic scale delta anchored at a screen-space point. When pan and zoom
 // are both present, the runtime applies anchored zoom first, then pan. Reserved
 // must be zero.
-struct VisualRuntimeViewChange {
+struct VRTViewChange {
   uint32_t flags;
   uint32_t reserved;
 
@@ -69,18 +68,18 @@ struct VisualRuntimeViewChange {
 
 constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
 
-struct VisualRuntimeAPI {
+struct VRTAPI {
   uint32_t abi_version;
   uint32_t struct_size;
   const char *backend_name;
 
-  void (*init)(VisualRuntimeState *, SurfaceDescriptor *);
-  void (*resize)(VisualRuntimeState *, const VisualRuntimeSurfaceMetrics *);
-  void (*change_view)(VisualRuntimeState *, const VisualRuntimeViewChange *);
-  void (*update)(VisualRuntimeState *, float);
-  void (*shutdown)(VisualRuntimeState *);
+  void (*init)(VRTState *, VRTSurfaceDescriptor *);
+  void (*resize)(VRTState *, const VRTSurfaceMetrics *);
+  void (*change_view)(VRTState *, const VRTViewChange *);
+  void (*update)(VRTState *, float);
+  void (*shutdown)(VRTState *);
 };
 
 extern "C" {
-const VisualRuntimeAPI *visual_runtime_get_api();
+const VRTAPI *visual_runtime_get_api();
 }

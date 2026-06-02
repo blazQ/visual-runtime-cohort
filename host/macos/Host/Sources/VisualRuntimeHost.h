@@ -24,10 +24,9 @@ public:
   VisualRuntimeHost &operator=(VisualRuntimeHost &&) noexcept = default;
 
   bool valid() const;
-  void attachSurface(void *native_surface,
-                     const VisualRuntimeSurfaceMetrics &metrics);
-  void resize(const VisualRuntimeSurfaceMetrics &metrics);
-  void changeView(const VisualRuntimeViewChange &change);
+  void attachSurface(void *native_surface, const VRTSurfaceMetrics &metrics);
+  void resize(const VRTSurfaceMetrics &metrics);
+  void changeView(const VRTViewChange &change);
   void tick(float dt);
   bool reload();
   std::string backendName() const;

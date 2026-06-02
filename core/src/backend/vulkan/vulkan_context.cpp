@@ -60,13 +60,13 @@ bool queue_families_complete(const QueueFamilies &families) {
          families.present != invalid_queue_family;
 }
 
-bool VulkanContext::init(SurfaceDescriptor *surface) {
-  if (!surface || surface->kind == SurfaceKind::None ||
+bool VulkanContext::init(VRTSurfaceDescriptor *surface) {
+  if (!surface || surface->kind == VRTSurfaceKind::None ||
       surface->surface_handle == 0) {
     return false;
   }
-  if ((surface->kind == SurfaceKind::LinuxXcbWindow ||
-       surface->kind == SurfaceKind::LinuxWaylandSurface) &&
+  if ((surface->kind == VRTSurfaceKind::LinuxXcbWindow ||
+       surface->kind == VRTSurfaceKind::LinuxWaylandSurface) &&
       !surface->display_handle) {
     return false;
   }
@@ -104,7 +104,7 @@ void VulkanContext::shutdown() {
   }
 }
 
-bool VulkanContext::create_instance(SurfaceKind surface_kind) {
+bool VulkanContext::create_instance(VRTSurfaceKind surface_kind) {
   std::vector<VkExtensionProperties> available_extensions;
   if (!enumerate_instance_extensions(available_extensions)) {
     return false;
@@ -112,7 +112,7 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
 
   std::vector<const char *> extensions{VK_KHR_SURFACE_EXTENSION_NAME};
 #if defined(__APPLE__)
-  if (surface_kind == SurfaceKind::MacOSMetalLayer) {
+  if (surface_kind == VRTSurfaceKind::MacOSMetalLayer) {
     extensions.push_back(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
   }
 #if defined(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
@@ -128,10 +128,10 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
   bool enable_portability_enumeration = false;
 #endif
 #if defined(__linux__)
-  if (surface_kind == SurfaceKind::LinuxXcbWindow) {
+  if (surface_kind == VRTSurfaceKind::LinuxXcbWindow) {
     extensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
   }
-  if (surface_kind == SurfaceKind::LinuxWaylandSurface) {
+  if (surface_kind == VRTSurfaceKind::LinuxWaylandSurface) {
     extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
   }
 #endif
@@ -163,9 +163,9 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
                   "failed to create Vulkan instance");
 }
 
-bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
+bool VulkanContext::create_surface(const VRTSurfaceDescriptor &surface) {
 #if defined(__APPLE__)
-  if (surface.kind == SurfaceKind::MacOSMetalLayer) {
+  if (surface.kind == VRTSurfaceKind::MacOSMetalLayer) {
     auto create_metal_surface = reinterpret_cast<PFN_vkCreateMetalSurfaceEXT>(
         vkGetInstanceProcAddr(instance_, "vkCreateMetalSurfaceEXT"));
     if (!create_metal_surface) {
@@ -184,7 +184,7 @@ bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
   }
 #endif
 #if defined(__linux__)
-  if (surface.kind == SurfaceKind::LinuxXcbWindow) {
+  if (surface.kind == VRTSurfaceKind::LinuxXcbWindow) {
     auto create_xcb_surface = reinterpret_cast<PFN_vkCreateXcbSurfaceKHR>(
         vkGetInstanceProcAddr(instance_, "vkCreateXcbSurfaceKHR"));
     if (!create_xcb_surface) {
@@ -202,7 +202,7 @@ bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
         create_xcb_surface(instance_, &create_info, nullptr, &surface_),
         "failed to create Vulkan XCB surface");
   }
-  if (surface.kind == SurfaceKind::LinuxWaylandSurface) {
+  if (surface.kind == VRTSurfaceKind::LinuxWaylandSurface) {
     auto create_wayland_surface =
         reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(
             vkGetInstanceProcAddr(instance_, "vkCreateWaylandSurfaceKHR"));

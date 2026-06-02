@@ -35,8 +35,8 @@ struct FrameUniforms {
 } // namespace
 
 struct RendererBackend {
-  bool init(SurfaceDescriptor *surface);
-  void resize(const VisualRuntimeSurfaceMetrics *metrics);
+  bool init(VRTSurfaceDescriptor *surface);
+  void resize(const VRTSurfaceMetrics *metrics);
   void render_frame(float t);
   void shutdown();
 
@@ -85,20 +85,20 @@ Renderer::~Renderer() = default;
 Renderer::Renderer(Renderer &&) noexcept = default;
 Renderer &Renderer::operator=(Renderer &&) noexcept = default;
 
-bool Renderer::init(SurfaceDescriptor *surface) {
+bool Renderer::init(VRTSurfaceDescriptor *surface) {
   if (!backend_) {
     backend_ = std::make_unique<RendererBackend>();
   }
   return backend_->init(surface);
 }
 
-void Renderer::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+void Renderer::resize(const VRTSurfaceMetrics *metrics) {
   if (backend_) {
     backend_->resize(metrics);
   }
 }
 
-void Renderer::change_view(const VisualRuntimeViewChange *) {
+void Renderer::change_view(const VRTViewChange *) {
   // View changes are implemented by the Metal backend first. Vulkan keeps the
   // API boundary compatible until the cohort adds matching behavior there.
 }
@@ -116,7 +116,7 @@ void Renderer::shutdown() {
   }
 }
 
-bool RendererBackend::init(SurfaceDescriptor *surface) {
+bool RendererBackend::init(VRTSurfaceDescriptor *surface) {
   shutdown();
 
   if (!context_.init(surface) || !create_command_pool() ||
@@ -132,7 +132,7 @@ bool RendererBackend::init(SurfaceDescriptor *surface) {
   return true;
 }
 
-void RendererBackend::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
   if (!metrics) {
     return;
   }

@@ -20,7 +20,7 @@ final class MetalNSView: NSView {
 
     override var wantsUpdateLayer: Bool { true }
 
-    var drawableSizeDidChange: ((VisualRuntimeSurfaceMetrics) -> Void)?
+    var drawableSizeDidChange: ((VRTSurfaceMetrics) -> Void)?
     var scrollDidChange: ((Double, CGPoint) -> Void)?
     private var lastDrawableScale: CGFloat = 0
     private var lastDrawableSize: CGSize = .zero

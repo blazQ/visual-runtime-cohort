@@ -15,9 +15,9 @@ struct Renderer {
   Renderer(Renderer &&) noexcept;
   Renderer &operator=(Renderer &&) noexcept;
 
-  bool init(SurfaceDescriptor *surface);
-  void resize(const VisualRuntimeSurfaceMetrics *metrics);
-  void change_view(const VisualRuntimeViewChange *change);
+  bool init(VRTSurfaceDescriptor *surface);
+  void resize(const VRTSurfaceMetrics *metrics);
+  void change_view(const VRTViewChange *change);
   void render_frame(float t);
   void shutdown();
 

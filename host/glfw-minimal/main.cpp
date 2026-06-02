@@ -58,8 +58,8 @@ bool attach_wayland_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
   int height = 0;
   glfwGetFramebufferSize(window, &width, &height);
 
-  SurfaceDescriptor surface{
-      SurfaceKind::LinuxWaylandSurface,
+  VRTSurfaceDescriptor surface{
+      VRTSurfaceKind::LinuxWaylandSurface,
       display,
       reinterpret_cast<uintptr_t>(wayland_surface),
       visual_runtime::metrics_1x(static_cast<uint32_t>(width),
@@ -92,8 +92,8 @@ bool attach_xcb_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
   int height = 0;
   glfwGetFramebufferSize(window, &width, &height);
 
-  SurfaceDescriptor surface{
-      SurfaceKind::LinuxXcbWindow,
+  VRTSurfaceDescriptor surface{
+      VRTSurfaceKind::LinuxXcbWindow,
       connection,
       static_cast<uintptr_t>(x11_window),
       visual_runtime::metrics_1x(static_cast<uint32_t>(width),

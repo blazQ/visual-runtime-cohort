@@ -28,13 +28,13 @@ std::string VisualRuntimeHost::backendName() const {
   return module_->backendName();
 }
 
-void VisualRuntimeHost::attachSurface(
-    void *native_surface, const VisualRuntimeSurfaceMetrics &metrics) {
+void VisualRuntimeHost::attachSurface(void *native_surface,
+                                      const VRTSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
-  SurfaceDescriptor surface{
-      SurfaceKind::MacOSMetalLayer,
+  VRTSurfaceDescriptor surface{
+      VRTSurfaceKind::MacOSMetalLayer,
       nullptr,
       reinterpret_cast<uintptr_t>(native_surface),
       metrics,
@@ -42,14 +42,14 @@ void VisualRuntimeHost::attachSurface(
   module_->attachSurface(surface);
 }
 
-void VisualRuntimeHost::resize(const VisualRuntimeSurfaceMetrics &metrics) {
+void VisualRuntimeHost::resize(const VRTSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
   module_->resize(metrics);
 }
 
-void VisualRuntimeHost::changeView(const VisualRuntimeViewChange &change) {
+void VisualRuntimeHost::changeView(const VRTViewChange &change) {
   if (!module_)
     return;
 

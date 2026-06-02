@@ -16,7 +16,7 @@ struct QueueFamilies {
 
 class VulkanContext {
 public:
-  bool init(SurfaceDescriptor *surface);
+  bool init(VRTSurfaceDescriptor *surface);
   void shutdown();
 
   VkInstance instance() const { return instance_; }
@@ -31,8 +31,8 @@ public:
   }
 
 private:
-  bool create_instance(SurfaceKind surface_kind);
-  bool create_surface(const SurfaceDescriptor &surface);
+  bool create_instance(VRTSurfaceKind surface_kind);
+  bool create_surface(const VRTSurfaceDescriptor &surface);
   bool pick_physical_device();
   bool physical_device_suitable(VkPhysicalDevice physical_device,
                                 QueueFamilies &families,

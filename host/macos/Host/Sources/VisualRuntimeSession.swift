@@ -23,7 +23,7 @@ public final class VisualRuntimeSession {
         )
     }
 
-    func resize(_ metrics: VisualRuntimeSurfaceMetrics) {
+    func resize(_ metrics: VRTSurfaceMetrics) {
         host.resize(metrics)
     }
 
@@ -63,8 +63,8 @@ public final class VisualRuntimeSession {
 
 extension VisualRuntimeSession {
     struct ViewChange {
-        fileprivate private(set) var rawValue = VisualRuntimeViewChange(
-            flags: VisualRuntimeViewChange_None.rawValue,
+        fileprivate private(set) var rawValue = VRTViewChange(
+            flags: VRTViewChange_None.rawValue,
             reserved: 0,
             pan_x_screen: 0,
             pan_y_screen: 0,
@@ -74,12 +74,12 @@ extension VisualRuntimeSession {
         )
 
         fileprivate var isEmpty: Bool {
-            rawValue.flags == VisualRuntimeViewChange_None.rawValue
+            rawValue.flags == VRTViewChange_None.rawValue
         }
 
         mutating func panBy(x: Double, y: Double) {
             guard x.isFinite, y.isFinite, x != 0 || y != 0 else { return }
-            rawValue.flags |= VisualRuntimeViewChange_Pan.rawValue
+            rawValue.flags |= VRTViewChange_Pan.rawValue
             rawValue.pan_x_screen += x
             rawValue.pan_y_screen += y
         }
@@ -93,7 +93,7 @@ extension VisualRuntimeSession {
             guard logScale.isFinite,
                   anchor.x.isFinite,
                   anchor.y.isFinite else { return }
-            rawValue.flags |= VisualRuntimeViewChange_Zoom.rawValue
+            rawValue.flags |= VRTViewChange_Zoom.rawValue
             rawValue.zoom_delta_log_scale += logScale
             rawValue.zoom_anchor_x_screen = anchor.x
             rawValue.zoom_anchor_y_screen = anchor.y
@@ -102,8 +102,8 @@ extension VisualRuntimeSession {
 }
 
 extension CAMetalLayer {
-    var visualRuntimeSurfaceMetrics: VisualRuntimeSurfaceMetrics {
-        VisualRuntimeSurfaceMetrics(
+    var visualRuntimeSurfaceMetrics: VRTSurfaceMetrics {
+        VRTSurfaceMetrics(
             pixel_width: UInt32(drawableSize.width),
             pixel_height: UInt32(drawableSize.height),
             screen_width: bounds.width,

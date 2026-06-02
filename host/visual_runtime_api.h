@@ -3,9 +3,9 @@
 
 #include <cstdio>
 
-using VisualRuntimeGetAPIFn = const VisualRuntimeAPI *(*)();
+using VisualRuntimeGetAPIFn = const VRTAPI *(*)();
 
-inline bool visual_runtime_api_valid(const VisualRuntimeAPI &api) {
+inline bool visual_runtime_api_valid(const VRTAPI &api) {
   if (api.abi_version != VISUAL_RUNTIME_API_VERSION) {
     std::fprintf(
         stderr,
@@ -13,11 +13,11 @@ inline bool visual_runtime_api_valid(const VisualRuntimeAPI &api) {
         api.abi_version, VISUAL_RUNTIME_API_VERSION);
     return false;
   }
-  if (api.struct_size < sizeof(VisualRuntimeAPI)) {
+  if (api.struct_size < sizeof(VRTAPI)) {
     std::fprintf(stderr,
                  "[visual_runtime_api] incompatible API size: got %u, expected "
                  "at least %zu\n",
-                 api.struct_size, sizeof(VisualRuntimeAPI));
+                 api.struct_size, sizeof(VRTAPI));
     return false;
   }
   if (!api.backend_name) {
