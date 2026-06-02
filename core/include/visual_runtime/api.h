@@ -1,10 +1,6 @@
 #pragma once
 #include <cstdint>
 
-struct VRTState {
-  void *runtime;
-};
-
 enum class VRTSurfaceKind : uint32_t {
   None = 0,
   MacOSMetalLayer = 1,
@@ -64,6 +60,12 @@ struct VRTViewChange {
   double zoom_delta_log_scale;
   double zoom_anchor_x_screen;
   double zoom_anchor_y_screen;
+};
+
+// Opaque per-instance runtime handle owned by the visual runtime API.
+// Hosts allocate this small carrier, but they must not inspect runtime.
+struct VRTState {
+  void *runtime;
 };
 
 constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;

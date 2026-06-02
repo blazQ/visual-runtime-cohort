@@ -3,13 +3,16 @@
 
 #include <cstdio>
 
-static const char *VERSION = "v1"; // change this to demonstrate hot reload
+namespace {
 
+// Private C++ owner for one visual runtime instance. Think of
+// this as the real runtime object: it owns renderer-facing state and is where
+// runtime concepts such as scene, view, or camera state should live.
 class VisualRuntime {
 public:
   explicit VisualRuntime(VRTSurfaceDescriptor *surface) {
     renderer_.init(surface);
-    std::printf("[visual-runtime %s] init\n", VERSION);
+    std::printf("[visual-runtime] init\n");
     std::fflush(stdout);
   }
 
@@ -36,43 +39,13 @@ private:
   float elapsed_time_ = 0.0f;
 };
 
-static VisualRuntime *runtime(VRTState *state) {
+// Recover the private C++ runtime from the opaque ABI carrier.
+VisualRuntime *runtime(VRTState *state) {
   return state ? static_cast<VisualRuntime *>(state->runtime) : nullptr;
 }
 
-static void visual_runtime_shutdown_impl(VRTState *state);
-
-static void visual_runtime_init_impl(VRTState *state,
-                                     VRTSurfaceDescriptor *surface) {
-  if (!state) {
-    return;
-  }
-
-  visual_runtime_shutdown_impl(state);
-  state->runtime = new VisualRuntime(surface);
-}
-
-static void visual_runtime_resize_impl(VRTState *state,
-                                       const VRTSurfaceMetrics *metrics) {
-  if (auto *rt = runtime(state); rt && metrics) {
-    rt->resize(*metrics);
-  }
-}
-
-static void visual_runtime_change_view_impl(VRTState *state,
-                                            const VRTViewChange *change) {
-  if (auto *rt = runtime(state); rt && change) {
-    rt->change_view(*change);
-  }
-}
-
-static void visual_runtime_update_impl(VRTState *state, float dt) {
-  if (auto *rt = runtime(state)) {
-    rt->update(dt);
-  }
-}
-
-static void visual_runtime_shutdown_impl(VRTState *state) {
+// Delete any runtime currently stored in the ABI carrier.
+void destroy_runtime(VRTState *state) {
   if (!state) {
     return;
   }
@@ -81,14 +54,59 @@ static void visual_runtime_shutdown_impl(VRTState *state) {
   state->runtime = nullptr;
 }
 
+// Function-table callbacks for the C ABI. Add or change functions here when
+// the public VRTAPI grows, then wire them into visual_runtime_get_api below.
+namespace api_callbacks {
+
+// Create a fresh runtime instance for this host-owned state carrier.
+void init(VRTState *state, VRTSurfaceDescriptor *surface) {
+  if (!state) {
+    return;
+  }
+
+  destroy_runtime(state);
+  state->runtime = new VisualRuntime(surface);
+}
+
+// Forward surface-size changes across the C boundary.
+void resize(VRTState *state, const VRTSurfaceMetrics *metrics) {
+  if (auto *rt = runtime(state); rt && metrics) {
+    rt->resize(*metrics);
+  }
+}
+
+// Forward product-shaped view changes across the C boundary.
+void change_view(VRTState *state, const VRTViewChange *change) {
+  if (auto *rt = runtime(state); rt && change) {
+    rt->change_view(*change);
+  }
+}
+
+// Advance and render one runtime tick.
+void update(VRTState *state, float dt) {
+  if (auto *rt = runtime(state)) {
+    rt->update(dt);
+  }
+}
+
+// Release the runtime instance owned by this state carrier.
+void shutdown(VRTState *state) { destroy_runtime(state); }
+
+} // namespace api_callbacks
+
+} // namespace
+
 extern "C" {
 
+// Build the function table that the host loads. The static table points at the
+// callback implementations above and remains valid for the runtime module's
+// lifetime.
 const VRTAPI *visual_runtime_get_api() {
   static const VRTAPI api{
       VISUAL_RUNTIME_API_VERSION,  sizeof(VRTAPI),
-      VISUAL_RUNTIME_BACKEND_NAME, visual_runtime_init_impl,
-      visual_runtime_resize_impl,  visual_runtime_change_view_impl,
-      visual_runtime_update_impl,  visual_runtime_shutdown_impl,
+      VISUAL_RUNTIME_BACKEND_NAME, api_callbacks::init,
+      api_callbacks::resize,       api_callbacks::change_view,
+      api_callbacks::update,       api_callbacks::shutdown,
   };
   return &api;
 }
