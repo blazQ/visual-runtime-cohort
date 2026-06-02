@@ -52,6 +52,26 @@ _Avoid_: runtime renderer mode, host backend
 The product-shaped interface of the visual runtime for creating and updating visual state. It uses product terminology rather than generic renderer concepts unless the product itself needs those concepts. Callers use the API without knowing whether or how the runtime retains visual state internally. In the current harness, this API may begin as an internal runtime seam before being exposed across the visual runtime API boundary.
 _Avoid_: renderer API, RHI, backend API, premature mesh/material/object API
 
+**View Intent Delta**:
+An already-interpreted visual change request passed to the visual runtime, such as a pan or zoom delta. Product and input logic decide the delta; the visual runtime applies it to its retained visual intention without owning raw input interpretation, acceleration, or smoothing policy.
+_Avoid_: raw gesture, input event, animation policy, smoothing command
+
+**Screen Unit**:
+A display-independent screen-space unit used for visual interaction deltas and anchors at the visual runtime boundary. On macOS this corresponds to points; on other harnesses it should correspond to logical pixels or an equivalent display-independent unit rather than physical framebuffer pixels.
+_Avoid_: physical pixel, framebuffer pixel, viewport ratio, world unit
+
+**Surface Metrics**:
+The paired drawable-pixel size and display-independent screen-unit size for a visual runtime surface. Pixel size drives graphics API drawable or swapchain sizing; screen size drives product-shaped interaction deltas and anchors.
+_Avoid_: raw framebuffer size, viewport-only size, mixed pixel/logical dimensions
+
+**Zoom Intent Delta**:
+A relative zoom change expressed as a logarithmic scale delta, anchored at a screen-space point. Positive values zoom in, negative values zoom out, and zero is a no-op. It is not a bounded or normalized absolute zoom level.
+_Avoid_: zoom level, normalized zoom, min/max zoom policy, raw wheel delta
+
+**View Change**:
+A product-shaped request to change the current view intention, such as panning and zooming together in one atomic interaction step. A view change is not a raw input event and should not encode input-device policy.
+_Avoid_: input event, camera command, renderer command, raw gesture
+
 **Visual Runtime Feature Parity**:
 The expectation that a participant can work on the same visual-runtime behavior across supported harnesses, even when each harness has different native UI affordances.
 _Avoid_: harness UI parity, identical app shell

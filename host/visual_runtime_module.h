@@ -29,11 +29,15 @@ struct VisualRuntimeModule {
     init();
   }
 
-  void resize(uint32_t width, uint32_t height) {
-    surface_.width = width;
-    surface_.height = height;
+  void resize(VisualRuntimeSurfaceMetrics metrics) {
+    surface_.metrics = metrics;
     if (initialized_ && api_.resize)
-      api_.resize(&state_, width, height);
+      api_.resize(&state_, &surface_.metrics);
+  }
+
+  void changeView(const VisualRuntimeViewChange &change) const {
+    if (initialized_ && api_.change_view)
+      api_.change_view(&state_, &change);
   }
 
   bool reloadIfChanged() {

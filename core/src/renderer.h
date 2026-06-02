@@ -16,7 +16,8 @@ struct Renderer {
   Renderer &operator=(Renderer &&) noexcept;
 
   bool init(SurfaceDescriptor *surface);
-  void resize(uint32_t width, uint32_t height);
+  void resize(const VisualRuntimeSurfaceMetrics *metrics);
+  void change_view(const VisualRuntimeViewChange *change);
   void render_frame(float t);
   void shutdown();
 

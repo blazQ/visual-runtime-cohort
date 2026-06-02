@@ -28,8 +28,8 @@ std::string VisualRuntimeHost::backendName() const {
   return module_->backendName();
 }
 
-void VisualRuntimeHost::attachSurface(void *native_surface, uint32_t width,
-                                      uint32_t height) {
+void VisualRuntimeHost::attachSurface(
+    void *native_surface, const VisualRuntimeSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
@@ -37,17 +37,23 @@ void VisualRuntimeHost::attachSurface(void *native_surface, uint32_t width,
       SurfaceKind::MacOSMetalLayer,
       nullptr,
       reinterpret_cast<uintptr_t>(native_surface),
-      width,
-      height,
+      metrics,
   };
   module_->attachSurface(surface);
 }
 
-void VisualRuntimeHost::resize(uint32_t width, uint32_t height) {
+void VisualRuntimeHost::resize(const VisualRuntimeSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
-  module_->resize(width, height);
+  module_->resize(metrics);
+}
+
+void VisualRuntimeHost::changeView(const VisualRuntimeViewChange &change) {
+  if (!module_)
+    return;
+
+  module_->changeView(change);
 }
 
 void VisualRuntimeHost::tick(float dt) {

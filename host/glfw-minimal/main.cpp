@@ -38,8 +38,8 @@ void framebuffer_resized(GLFWwindow *window, int width, int height) {
     return;
   }
 
-  state->runtime->resize(static_cast<uint32_t>(width),
-                         static_cast<uint32_t>(height));
+  state->runtime->resize(visual_runtime::metrics_1x(
+      static_cast<uint32_t>(width), static_cast<uint32_t>(height)));
   std::fprintf(stderr, "[glfw-minimal] resized to %dx%d\n", width, height);
 }
 
@@ -62,12 +62,12 @@ bool attach_wayland_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
       SurfaceKind::LinuxWaylandSurface,
       display,
       reinterpret_cast<uintptr_t>(wayland_surface),
-      static_cast<uint32_t>(width),
-      static_cast<uint32_t>(height),
+      visual_runtime::metrics_1x(static_cast<uint32_t>(width),
+                                 static_cast<uint32_t>(height)),
   };
   std::fprintf(stderr,
                "[glfw-minimal] attaching LinuxWaylandSurface surface (%ux%u)\n",
-               surface.width, surface.height);
+               surface.metrics.pixel_width, surface.metrics.pixel_height);
   runtime.attachSurface(surface);
   return true;
 }
@@ -93,13 +93,15 @@ bool attach_xcb_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
   glfwGetFramebufferSize(window, &width, &height);
 
   SurfaceDescriptor surface{
-      SurfaceKind::LinuxXcbWindow,        connection,
-      static_cast<uintptr_t>(x11_window), static_cast<uint32_t>(width),
-      static_cast<uint32_t>(height),
+      SurfaceKind::LinuxXcbWindow,
+      connection,
+      static_cast<uintptr_t>(x11_window),
+      visual_runtime::metrics_1x(static_cast<uint32_t>(width),
+                                 static_cast<uint32_t>(height)),
   };
   std::fprintf(stderr,
                "[glfw-minimal] attaching LinuxXcbWindow surface (%ux%u)\n",
-               surface.width, surface.height);
+               surface.metrics.pixel_width, surface.metrics.pixel_height);
   runtime.attachSurface(surface);
   return true;
 }

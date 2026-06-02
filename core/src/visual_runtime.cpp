@@ -16,9 +16,14 @@ static void visual_runtime_init_impl(VisualRuntimeState *state,
   std::fflush(stdout);
 }
 
-static void visual_runtime_resize_impl(VisualRuntimeState *, uint32_t width,
-                                       uint32_t height) {
-  g_renderer.resize(width, height);
+static void visual_runtime_resize_impl(
+    VisualRuntimeState *, const VisualRuntimeSurfaceMetrics *metrics) {
+  g_renderer.resize(metrics);
+}
+
+static void visual_runtime_change_view_impl(VisualRuntimeState *,
+                                            const VisualRuntimeViewChange *change) {
+  g_renderer.change_view(change);
 }
 
 static void visual_runtime_update_impl(VisualRuntimeState *state, float dt) {
@@ -36,9 +41,9 @@ extern "C" {
 const VisualRuntimeAPI *visual_runtime_get_api() {
   static const VisualRuntimeAPI api{
       VISUAL_RUNTIME_API_VERSION,   sizeof(VisualRuntimeAPI),
-      VISUAL_RUNTIME_BACKEND_NAME,  visual_runtime_init_impl,
-      visual_runtime_resize_impl,   visual_runtime_update_impl,
-      visual_runtime_shutdown_impl,
+      VISUAL_RUNTIME_BACKEND_NAME,       visual_runtime_init_impl,
+      visual_runtime_resize_impl,        visual_runtime_change_view_impl,
+      visual_runtime_update_impl,        visual_runtime_shutdown_impl,
   };
   return &api;
 }

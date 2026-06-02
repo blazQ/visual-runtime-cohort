@@ -36,7 +36,7 @@ struct FrameUniforms {
 
 struct RendererBackend {
   bool init(SurfaceDescriptor *surface);
-  void resize(uint32_t width, uint32_t height);
+  void resize(const VisualRuntimeSurfaceMetrics *metrics);
   void render_frame(float t);
   void shutdown();
 
@@ -92,10 +92,15 @@ bool Renderer::init(SurfaceDescriptor *surface) {
   return backend_->init(surface);
 }
 
-void Renderer::resize(uint32_t width, uint32_t height) {
+void Renderer::resize(const VisualRuntimeSurfaceMetrics *metrics) {
   if (backend_) {
-    backend_->resize(width, height);
+    backend_->resize(metrics);
   }
+}
+
+void Renderer::change_view(const VisualRuntimeViewChange *) {
+  // View changes are implemented by the Metal backend first. Vulkan keeps the
+  // API boundary compatible until the cohort adds matching behavior there.
 }
 
 void Renderer::render_frame(float t) {
@@ -122,12 +127,18 @@ bool RendererBackend::init(SurfaceDescriptor *surface) {
     return false;
   }
 
-  resize(surface->width, surface->height);
+  resize(&surface->metrics);
 
   return true;
 }
 
-void RendererBackend::resize(uint32_t width, uint32_t height) {
+void RendererBackend::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+  if (!metrics) {
+    return;
+  }
+
+  const uint32_t width = metrics->pixel_width;
+  const uint32_t height = metrics->pixel_height;
   if (render_width_ == width && render_height_ == height) {
     return;
   }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "visual_runtime/api.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,8 +24,10 @@ public:
   VisualRuntimeHost &operator=(VisualRuntimeHost &&) noexcept = default;
 
   bool valid() const;
-  void attachSurface(void *native_surface, uint32_t width, uint32_t height);
-  void resize(uint32_t width, uint32_t height);
+  void attachSurface(void *native_surface,
+                     const VisualRuntimeSurfaceMetrics &metrics);
+  void resize(const VisualRuntimeSurfaceMetrics &metrics);
+  void changeView(const VisualRuntimeViewChange &change);
   void tick(float dt);
   bool reload();
   std::string backendName() const;

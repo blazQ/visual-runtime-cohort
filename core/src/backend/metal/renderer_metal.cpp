@@ -7,11 +7,21 @@
 #include "Metal/Metal.hpp"
 #include "QuartzCore/QuartzCore.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 
 namespace {
+
+bool metrics_equal(const VisualRuntimeSurfaceMetrics &lhs,
+                   const VisualRuntimeSurfaceMetrics &rhs) {
+  return lhs.pixel_width == rhs.pixel_width &&
+         lhs.pixel_height == rhs.pixel_height &&
+         lhs.screen_width == rhs.screen_width &&
+         lhs.screen_height == rhs.screen_height;
+}
 
 struct Vertex {
   float position[2];
@@ -37,7 +47,8 @@ void print_error(const char *context, NS::Error *error) {
 
 struct RendererBackend {
   bool init(SurfaceDescriptor *surface);
-  void resize(uint32_t width, uint32_t height);
+  void resize(const VisualRuntimeSurfaceMetrics *metrics);
+  void change_view(const VisualRuntimeViewChange *change);
   void render_frame(float t);
   void shutdown();
 
@@ -45,6 +56,9 @@ private:
   bool build_pipeline();
   bool build_geometry();
   bool build_uniforms();
+  bool has_screen_metrics() const;
+  void apply_zoom(const VisualRuntimeViewChange &change);
+  void apply_pan(const VisualRuntimeViewChange &change);
   void update_frame_uniforms();
 
   CA::MetalLayer *layer_ = nullptr;
@@ -55,8 +69,8 @@ private:
   MTL::Buffer *vertex_buffer_ = nullptr;
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
   NS::UInteger vertex_count_ = 0;
-  uint32_t render_width_ = 0;
-  uint32_t render_height_ = 0;
+  VisualRuntimeSurfaceMetrics metrics_{};
+  glm::dmat4 view_matrix_{1.0};
 };
 
 Renderer::Renderer() = default;
@@ -71,9 +85,15 @@ bool Renderer::init(SurfaceDescriptor *surface) {
   return backend_->init(surface);
 }
 
-void Renderer::resize(uint32_t width, uint32_t height) {
+void Renderer::resize(const VisualRuntimeSurfaceMetrics *metrics) {
   if (backend_) {
-    backend_->resize(width, height);
+    backend_->resize(metrics);
+  }
+}
+
+void Renderer::change_view(const VisualRuntimeViewChange *change) {
+  if (backend_) {
+    backend_->change_view(change);
   }
 }
 
@@ -123,7 +143,7 @@ bool RendererBackend::init(SurfaceDescriptor *surface) {
     return false;
   }
 
-  resize(surface->width, surface->height);
+  resize(&surface->metrics);
 
   if (!build_pipeline() || !build_geometry()) {
     shutdown();
@@ -133,14 +153,65 @@ bool RendererBackend::init(SurfaceDescriptor *surface) {
   return true;
 }
 
-void RendererBackend::resize(uint32_t width, uint32_t height) {
-  if (render_width_ == width && render_height_ == height) {
+void RendererBackend::resize(const VisualRuntimeSurfaceMetrics *metrics) {
+  if (!metrics) {
+    return;
+  }
+  if (metrics_equal(metrics_, *metrics)) {
     return;
   }
 
-  render_width_ = width;
-  render_height_ = height;
+  metrics_ = *metrics;
   update_frame_uniforms();
+}
+
+void RendererBackend::change_view(const VisualRuntimeViewChange *change) {
+  if (!change || change->reserved != 0 || !has_screen_metrics()) {
+    return;
+  }
+
+  bool changed = false;
+
+  if ((change->flags & VisualRuntimeViewChange_Zoom) != 0) {
+    apply_zoom(*change);
+    changed = true;
+  }
+
+  if ((change->flags & VisualRuntimeViewChange_Pan) != 0) {
+    apply_pan(*change);
+    changed = true;
+  }
+
+  if (changed) {
+    update_frame_uniforms();
+  }
+}
+
+bool RendererBackend::has_screen_metrics() const {
+  return metrics_.screen_width > 0.0 && metrics_.screen_height > 0.0;
+}
+
+void RendererBackend::apply_zoom(const VisualRuntimeViewChange &change) {
+  const double scale = std::exp(change.zoom_delta_log_scale);
+  const double anchor_x =
+      (2.0 * change.zoom_anchor_x_screen / metrics_.screen_width) - 1.0;
+  const double anchor_y =
+      1.0 - (2.0 * change.zoom_anchor_y_screen / metrics_.screen_height);
+
+  view_matrix_ =
+      glm::translate(glm::dmat4(1.0), glm::dvec3(anchor_x, anchor_y, 0.0)) *
+      glm::scale(glm::dmat4(1.0), glm::dvec3(scale, scale, 1.0)) *
+      glm::translate(glm::dmat4(1.0), glm::dvec3(-anchor_x, -anchor_y, 0.0)) *
+      view_matrix_;
+}
+
+void RendererBackend::apply_pan(const VisualRuntimeViewChange &change) {
+  const double ndc_x = 2.0 * change.pan_x_screen / metrics_.screen_width;
+  const double ndc_y = -2.0 * change.pan_y_screen / metrics_.screen_height;
+
+  view_matrix_ =
+      glm::translate(glm::dmat4(1.0), glm::dvec3(ndc_x, ndc_y, 0.0)) *
+      view_matrix_;
 }
 
 void RendererBackend::render_frame(float t) {
@@ -171,8 +242,8 @@ void RendererBackend::render_frame(float t) {
   enc->setViewport(MTL::Viewport{
       0.0,
       0.0,
-      static_cast<double>(render_width_),
-      static_cast<double>(render_height_),
+      static_cast<double>(metrics_.pixel_width),
+      static_cast<double>(metrics_.pixel_height),
       0.0,
       1.0,
   });
@@ -286,17 +357,20 @@ void RendererBackend::update_frame_uniforms() {
   }
 
   FrameUniforms uniforms{};
+  glm::mat4 aspect_matrix{1.0f};
 
-  if (render_width_ > 0 && render_height_ > 0) {
-    const float aspect =
-        static_cast<float>(render_width_) / static_cast<float>(render_height_);
+  if (metrics_.pixel_width > 0 && metrics_.pixel_height > 0) {
+    const float aspect = static_cast<float>(metrics_.pixel_width) /
+                         static_cast<float>(metrics_.pixel_height);
 
     if (aspect >= 1.0f) {
-      uniforms.matrix[0][0] = 1.0f / aspect;
+      aspect_matrix[0][0] = 1.0f / aspect;
     } else {
-      uniforms.matrix[1][1] = aspect;
+      aspect_matrix[1][1] = aspect;
     }
   }
+
+  uniforms.matrix = glm::mat4(view_matrix_) * aspect_matrix;
 
   auto *contents =
       static_cast<FrameUniforms *>(frame_uniform_buffer_->contents());
@@ -333,6 +407,5 @@ void RendererBackend::shutdown() {
     layer_ = nullptr;
   }
   vertex_count_ = 0;
-  render_width_ = 0;
-  render_height_ = 0;
+  metrics_ = {};
 }
