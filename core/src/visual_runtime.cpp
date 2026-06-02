@@ -3,8 +3,23 @@
 #include "visual_runtime/api.h"
 
 #include <cstdio>
+#include <glm/vec4.hpp>
 
 namespace {
+
+glm::vec4 color_to_vec4(const VRTColorRGBA &color) {
+  return glm::vec4{color.r, color.g, color.b, color.a};
+}
+
+bool color_equal(const VRTColorRGBA &lhs, const VRTColorRGBA &rhs) {
+  return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b &&
+         lhs.a == rhs.a;
+}
+
+bool scene_settings_equal(const VRTSceneSettings &lhs,
+                          const VRTSceneSettings &rhs) {
+  return color_equal(lhs.background_color, rhs.background_color);
+}
 
 // Private C++ owner for one visual runtime instance. Think of
 // this as the real runtime object: it owns renderer-facing state and is where
@@ -40,6 +55,14 @@ public:
     }
   }
 
+  void set_scene_settings(const VRTSceneSettings &settings) {
+    if (scene_settings_equal(scene_settings_, settings)) {
+      return;
+    }
+    scene_settings_ = settings;
+    sync_frame_config();
+  }
+
   void update(float dt) {
     frame_count_ += 1;
     elapsed_time_ += dt;
@@ -48,9 +71,14 @@ public:
 
 private:
   void sync_frame_config() {
-    renderer_.set_frame_config(view_state_.frame_config());
+    FrameConfig frame_config = view_state_.frame_config();
+    frame_config.clear_color = color_to_vec4(scene_settings_.background_color);
+    renderer_.set_frame_config(frame_config);
   }
 
+  VRTSceneSettings scene_settings_{
+      VRTColorRGBA{0.0f, 0.0f, 0.0f, 1.0f},
+  };
   ViewState view_state_;
   Renderer renderer_;
   uint64_t frame_count_ = 0;
@@ -93,6 +121,13 @@ void resize(VRTState *state, const VRTSurfaceMetrics *metrics) {
   }
 }
 
+// Forward app-owned scene settings across the C boundary.
+void set_scene_settings(VRTState *state, const VRTSceneSettings *settings) {
+  if (auto *rt = runtime(state); rt && settings) {
+    rt->set_scene_settings(*settings);
+  }
+}
+
 // Forward product-shaped view changes across the C boundary.
 void change_view(VRTState *state, const VRTViewChange *change) {
   if (auto *rt = runtime(state); rt && change) {
@@ -123,8 +158,9 @@ const VRTAPI *visual_runtime_get_api() {
   static const VRTAPI api{
       VISUAL_RUNTIME_API_VERSION,  sizeof(VRTAPI),
       VISUAL_RUNTIME_BACKEND_NAME, api_callbacks::init,
-      api_callbacks::resize,       api_callbacks::change_view,
-      api_callbacks::update,       api_callbacks::shutdown,
+      api_callbacks::resize,       api_callbacks::set_scene_settings,
+      api_callbacks::change_view,  api_callbacks::update,
+      api_callbacks::shutdown,
   };
   return &api;
 }

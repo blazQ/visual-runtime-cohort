@@ -21,6 +21,7 @@
 		C3D13808AFEA86E378A43033 /* VisualRuntimeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52430084E36D39D3A16382B /* VisualRuntimeSession.swift */; };
 		E76826F6DF376122474D6C28 /* ZoomControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009C6148369B423C09823E2F /* ZoomControls.swift */; };
 		EFBC298F75DF97599780F6FE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D88B3CE696D9995711895E /* ContentView.swift */; };
+		FCB0750D3BB41EE6294A55B3 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BB7C340B025E99C40526F1 /* AppSettings.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +70,7 @@
 		65259F6A577BBD04858099C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		69F2F2EED12074247AFBF3E6 /* HostApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostApp.swift; sourceTree = "<group>"; };
 		6B045050D61FACD3BE88C6FE /* TuistAssets+Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistAssets+Host.swift"; sourceTree = "<group>"; };
+		70BB7C340B025E99C40526F1 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		91BA84221B4E24E635865A12 /* HostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostTests.swift; sourceTree = "<group>"; };
 		C9956EB9C4A063FCB1080CD8 /* TuistBundle+Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistBundle+Host.swift"; sourceTree = "<group>"; };
 		D99F89A6271CF73BA7EBE8DE /* Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compatibility.swift; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 		7494E506884B157AF816D064 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				70BB7C340B025E99C40526F1 /* AppSettings.swift */,
 				D99F89A6271CF73BA7EBE8DE /* Compatibility.swift */,
 				26D88B3CE696D9995711895E /* ContentView.swift */,
 				E865383EF5D888002C869858 /* ControlsView.swift */,
@@ -303,6 +306,7 @@
 			files = (
 				C3382A2BFD1D110B7DDF2FF4 /* TuistAssets+Host.swift in Sources */,
 				9A1F09E776E84A3AE68758A5 /* TuistBundle+Host.swift in Sources */,
+				FCB0750D3BB41EE6294A55B3 /* AppSettings.swift in Sources */,
 				B302110E4743EB2D8B784FF2 /* Compatibility.swift in Sources */,
 				EFBC298F75DF97599780F6FE /* ContentView.swift in Sources */,
 				995862F5AEB78875544175A9 /* ControlsView.swift in Sources */,

@@ -38,6 +38,17 @@ struct VRTSurfaceDescriptor {
   VRTSurfaceMetrics metrics;
 };
 
+struct VRTColorRGBA {
+  float r;
+  float g;
+  float b;
+  float a;
+};
+
+struct VRTSceneSettings {
+  VRTColorRGBA background_color;
+};
+
 enum VRTViewChangeFlags : uint32_t {
   VRTViewChange_None = 0,
   VRTViewChange_Pan = 1u << 0,
@@ -77,6 +88,7 @@ struct VRTAPI {
 
   void (*init)(VRTState *, VRTSurfaceDescriptor *);
   void (*resize)(VRTState *, const VRTSurfaceMetrics *);
+  void (*set_scene_settings)(VRTState *, const VRTSceneSettings *);
   void (*change_view)(VRTState *, const VRTViewChange *);
   void (*update)(VRTState *, float);
   void (*shutdown)(VRTState *);

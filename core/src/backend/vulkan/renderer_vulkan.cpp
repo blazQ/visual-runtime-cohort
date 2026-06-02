@@ -79,6 +79,7 @@ private:
   VulkanPipeline pipeline_{};
   uint32_t render_width_ = 0;
   uint32_t render_height_ = 0;
+  FrameConfig frame_config_{};
 };
 
 Renderer::Renderer() = default;
@@ -162,7 +163,8 @@ void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
 }
 
 void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
-  update_frame_uniforms(frame_config);
+  frame_config_ = frame_config;
+  update_frame_uniforms(frame_config_);
 }
 
 void RendererBackend::render_frame(float t) {
@@ -530,7 +532,9 @@ bool RendererBackend::record_clear_commands(uint32_t image_index) {
   color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  color_attachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+  const glm::vec4 &clear_color = frame_config_.clear_color;
+  color_attachment.clearValue.color = {
+      {clear_color.r, clear_color.g, clear_color.b, clear_color.a}};
 
   VkRenderingInfo rendering_info{};
   rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;

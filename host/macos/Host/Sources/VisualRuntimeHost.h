@@ -26,6 +26,7 @@ public:
   bool valid() const;
   void attachSurface(void *native_surface, const VRTSurfaceMetrics &metrics);
   void resize(const VRTSurfaceMetrics &metrics);
+  void setSceneSettings(const VRTSceneSettings &settings);
   void changeView(const VRTViewChange &change);
   void tick(float dt);
   bool reload();

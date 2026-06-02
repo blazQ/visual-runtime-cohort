@@ -72,6 +72,18 @@ _Avoid_: zoom level, normalized zoom, min/max zoom policy, raw wheel delta
 A product-shaped request to change the current view intention, such as panning and zooming together in one atomic interaction step. A view change is not a raw input event and should not encode input-device policy.
 _Avoid_: input event, camera command, renderer command, raw gesture
 
+**Scene Settings**:
+Product-shaped presentation preferences owned by the harness and supplied to the visual runtime as an absolute snapshot for the scene, such as the scene background color. Scene settings describe colors as linear RGBA values and are not renderer commands, backend options, or per-frame graphics descriptors.
+_Avoid_: renderer settings, render settings, generic parameters, user properties
+
+**Linear RGBA Color**:
+A semantic color value with red, green, blue, and alpha channels expressed in linear color space. At the visual runtime API boundary, color values should be named as colors rather than as generic four-float vectors.
+_Avoid_: generic float4, SIMD vector, GLM vector
+
+**Scene Settings Default**:
+The visual runtime's fallback scene settings used before a harness supplies its app-owned scene settings snapshot.
+_Avoid_: backend default, host-only default
+
 **Visual Runtime Feature Parity**:
 The expectation that a participant can work on the same visual-runtime behavior across supported harnesses, even when each harness has different native UI affordances.
 _Avoid_: harness UI parity, identical app shell
@@ -113,6 +125,10 @@ Domain expert: "In the Vulkan backend partition. Metal and Vulkan assets should 
 Dev: "Where should clear color live if both Metal and Vulkan need it?"
 
 Domain expert: "If it expresses product-shaped frame intent, put it in the runtime partition as frame config. Do not create a generic renderer abstraction just to deduplicate backend code."
+
+Dev: "Should the harness call this renderer settings?"
+
+Domain expert: "No. The harness supplies scene settings, and the visual runtime derives frame config and backend details from them."
 
 Dev: "Should the Linux harness match the macOS harness UI?"
 

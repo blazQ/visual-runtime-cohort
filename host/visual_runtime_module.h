@@ -34,6 +34,11 @@ struct VisualRuntimeModule {
       api_.resize(&state_, &surface_.metrics);
   }
 
+  void setSceneSettings(const VRTSceneSettings &settings) const {
+    if (initialized_ && api_.set_scene_settings)
+      api_.set_scene_settings(&state_, &settings);
+  }
+
   void changeView(const VRTViewChange &change) const {
     if (initialized_ && api_.change_view)
       api_.change_view(&state_, &change);

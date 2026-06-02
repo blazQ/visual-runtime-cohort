@@ -27,6 +27,10 @@ public final class VisualRuntimeSession {
         host.resize(metrics)
     }
 
+    func setSceneSettings(_ settings: SceneSettings) {
+        host.setSceneSettings(settings.rawValue)
+    }
+
     func changeView(_ build: (inout ViewChange) -> Void) {
         var change = ViewChange()
         build(&change)
@@ -62,6 +66,36 @@ public final class VisualRuntimeSession {
 }
 
 extension VisualRuntimeSession {
+    struct SceneSettings: Equatable {
+        let backgroundColor: ColorRGBA
+
+        init(backgroundColor: ColorRGBA) {
+            self.backgroundColor = backgroundColor
+        }
+
+        fileprivate var rawValue: VRTSceneSettings {
+            VRTSceneSettings(background_color: backgroundColor.rawValue)
+        }
+    }
+
+    struct ColorRGBA: Equatable {
+        let red: Float
+        let green: Float
+        let blue: Float
+        let alpha: Float
+
+        init(red: Float, green: Float, blue: Float, alpha: Float) {
+            self.red = red
+            self.green = green
+            self.blue = blue
+            self.alpha = alpha
+        }
+
+        fileprivate var rawValue: VRTColorRGBA {
+            VRTColorRGBA(r: red, g: green, b: blue, a: alpha)
+        }
+    }
+
     struct ViewChange {
         fileprivate private(set) var rawValue = VRTViewChange(
             flags: VRTViewChange_None.rawValue,

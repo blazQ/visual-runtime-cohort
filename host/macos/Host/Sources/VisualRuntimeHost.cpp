@@ -49,6 +49,13 @@ void VisualRuntimeHost::resize(const VRTSurfaceMetrics &metrics) {
   module_->resize(metrics);
 }
 
+void VisualRuntimeHost::setSceneSettings(const VRTSceneSettings &settings) {
+  if (!module_)
+    return;
+
+  module_->setSceneSettings(settings);
+}
+
 void VisualRuntimeHost::changeView(const VRTViewChange &change) {
   if (!module_)
     return;

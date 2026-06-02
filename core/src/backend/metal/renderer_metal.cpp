@@ -64,6 +64,7 @@ private:
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
   NS::UInteger vertex_count_ = 0;
   VRTSurfaceMetrics metrics_{};
+  FrameConfig frame_config_{};
 };
 
 Renderer::Renderer() = default;
@@ -158,7 +159,8 @@ void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
 }
 
 void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
-  update_frame_uniforms(frame_config);
+  frame_config_ = frame_config;
+  update_frame_uniforms(frame_config_);
 }
 
 void RendererBackend::render_frame(float t) {
@@ -182,7 +184,9 @@ void RendererBackend::render_frame(float t) {
   color->setTexture(drawable->texture());
   color->setLoadAction(MTL::LoadActionClear);
   color->setStoreAction(MTL::StoreActionStore);
-  color->setClearColor(MTL::ClearColor(0, 0, 0, 1.0));
+  const glm::vec4 &clear_color = frame_config_.clear_color;
+  color->setClearColor(MTL::ClearColor(clear_color.r, clear_color.g,
+                                       clear_color.b, clear_color.a));
 
   auto *cmd = queue_->commandBuffer();
   auto *enc = cmd->renderCommandEncoder(pass);

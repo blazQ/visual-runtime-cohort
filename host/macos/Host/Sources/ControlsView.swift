@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ControlsView: View {
     let backendName: String
+    @Binding var backgroundColor: Color
     let onZoomIn: () -> Void
     let onZoomOut: () -> Void
 
@@ -10,6 +11,13 @@ struct ControlsView: View {
             StatusView(backendName: backendName)
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            ColorPicker("Background", selection: $backgroundColor, supportsOpacity: true)
+                .padding(10)
+                .compatGlassEffect(in: .capsule)
+                .accessibilityLabel("Background color")
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
 
             ZoomControls(
                 onZoomIn: onZoomIn,
@@ -28,6 +36,7 @@ struct ControlsView: View {
 
         ControlsView(
             backendName: "preview",
+            backgroundColor: .constant(.black),
             onZoomIn: {},
             onZoomOut: {}
         )

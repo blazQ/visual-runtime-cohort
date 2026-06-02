@@ -64,6 +64,7 @@ final class MetalNSView: NSView {
 
 struct MetalView: NSViewRepresentable {
     let session: VisualRuntimeSession
+    let sceneSettings: VisualRuntimeSession.SceneSettings
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
@@ -73,13 +74,16 @@ struct MetalView: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: MetalNSView, context: Context) {}
+    func updateNSView(_ view: MetalNSView, context: Context) {
+        context.coordinator.applySceneSettings(sceneSettings)
+    }
 
     // MARK: Coordinator - owns the display link and drives visual runtime ticks
 
     final class Coordinator: NSObject {
         let session: VisualRuntimeSession
         private var displayLink: CADisplayLink?
+        private var appliedSceneSettings: VisualRuntimeSession.SceneSettings?
         private var lastTime: Double = 0
         private var pendingScrollZoom: Double = 0
         private var scrollZoomAnchor: CGPoint = .zero
@@ -103,6 +107,12 @@ struct MetalView: NSViewRepresentable {
             let displayLink = view.displayLink(target: self, selector: #selector(displayLinkFired(_:)))
             displayLink.add(to: .main, forMode: .common)
             self.displayLink = displayLink
+        }
+
+        func applySceneSettings(_ settings: VisualRuntimeSession.SceneSettings) {
+            guard settings != appliedSceneSettings else { return }
+            appliedSceneSettings = settings
+            session.setSceneSettings(settings)
         }
 
         private func enqueueScrollZoom(deltaY: Double, anchor: CGPoint) {

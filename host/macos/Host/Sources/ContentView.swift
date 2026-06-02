@@ -3,6 +3,7 @@ import SwiftUI
 
 public struct ContentView: View {
     private let session: VisualRuntimeSession
+    @State private var appSettings = AppSettings()
     @State private var lastPanTranslation: CGSize = .zero
     @State private var viewportSize: CGSize = .zero
 
@@ -12,7 +13,7 @@ public struct ContentView: View {
 
     public var body: some View {
         ZStack(alignment: .topLeading) {
-            MetalView(session: session)
+            MetalView(session: session, sceneSettings: sceneSettings)
                 .gesture(
                     DragGesture(coordinateSpace: .local)
                         .onChanged { value in
@@ -33,6 +34,7 @@ public struct ContentView: View {
 
             ControlsView(
                 backendName: session.backendName,
+                backgroundColor: $appSettings.sceneBackgroundColor,
                 onZoomIn: { zoom(by: 1.25) },
                 onZoomOut: { zoom(by: 0.8) }
             )
@@ -41,6 +43,10 @@ public struct ContentView: View {
             viewportSize = newSize
         }
         .frame(minWidth: 800, minHeight: 600)
+    }
+
+    private var sceneSettings: VisualRuntimeSession.SceneSettings {
+        VisualRuntimeSession.SceneSettings(backgroundColor: appSettings.sceneBackgroundColor)
     }
 
     private func zoom(by scale: Double) {
