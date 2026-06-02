@@ -3,7 +3,7 @@
 
 #include <cstdio>
 
-static const char *VERSION = "v1"; // change this to demonstrate hot reload
+static const char *VERSION = "v6"; // change this to demonstrate hot reload
 
 static Renderer g_renderer;
 
@@ -32,7 +32,7 @@ static void visual_runtime_shutdown_impl(VisualRuntimeState *) {
 }
 
 static void visual_runtime_set_background_color_impl(VisualRuntimeState *,
-                                                     const BackgroundColor *color) {
+                                                     const Color *color) {
   if(color){
     g_renderer.set_background_color(color->r, color->g, color->b);
   }                                              
@@ -42,6 +42,13 @@ static void visual_runtime_set_view_impl(VisualRuntimeState *,
                                          const ViewState *view) {
   if (view) {
     g_renderer.set_view(view->pan_x, view->pan_y, view->zoom);
+  }
+}
+
+static void visual_runtime_draw_rect_impl(VisualRuntimeState *,
+                                         const Rectangle *rect) {
+  if (rect) {
+    g_renderer.draw_rect(rect->top_left_corner_x, rect->top_left_corner_y, rect->width, rect->height, rect->color.r, rect->color.g, rect->color.b);
   }
 }
 
@@ -55,6 +62,7 @@ const VisualRuntimeAPI *visual_runtime_get_api() {
       visual_runtime_shutdown_impl,
       visual_runtime_set_background_color_impl,
       visual_runtime_set_view_impl,
+      visual_runtime_draw_rect_impl,
   };
   return &api;
 }

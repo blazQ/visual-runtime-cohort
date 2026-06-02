@@ -4,6 +4,7 @@
 #include "vulkan_pipeline.hpp"
 #include "vulkan_utils.hpp"
 
+#include <cstdint>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -12,6 +13,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <vulkan/vulkan_core.h>
 
 namespace {
 
@@ -42,6 +44,7 @@ struct RendererBackend {
   void shutdown();
   void set_background_color(float r, float g, float b);
   void set_view(float pan_x, float pan_y, float zoom);
+  void draw_rect(float top_left_corner_x, float top_left_corner_y, float width, float height, float r, float g, float b);
 
 private:
   bool create_command_pool();
@@ -89,6 +92,10 @@ private:
   float pan_x_ = 0.0f;
   float pan_y_ = 0.0f;
   float zoom_ = 1.0f;
+
+  static constexpr uint32_t MAX_RECTS = 128;
+  Vertex staged_vertices_[MAX_RECTS * 6]; // 6 Vertices make a quad
+  uint32_t staged_vertex_count_ = 0;
 };
 
 Renderer::Renderer() = default;
@@ -134,6 +141,11 @@ void Renderer::set_view(float pan_x, float pan_y, float zoom) {
   }
 }
 
+void Renderer::draw_rect(float top_left_corner_x, float top_left_corner_y, float width, float height, float r, float g, float b){
+  if (backend_) {
+    backend_->draw_rect(top_left_corner_x, top_left_corner_y, width, height, r, g, b);
+  }
+}
 
 bool RendererBackend::init(SurfaceDescriptor *surface) {
   shutdown();
@@ -185,6 +197,17 @@ void RendererBackend::render_frame(float t) {
                 "failed to wait for Vulkan frame fence")) {
     return;
   }
+
+  const VkDeviceSize upload_size = sizeof(Vertex) * staged_vertex_count_;
+  if (upload_size > 0) {
+    void *data = nullptr;
+    vkMapMemory(context_.device(), vertex_buffer_memory_, 0, upload_size, 0, &data);
+    std::memcpy(data, staged_vertices_, upload_size);
+    vkUnmapMemory(context_.device(), vertex_buffer_memory_);
+  }
+
+  vertex_count_ = staged_vertex_count_;
+  staged_vertex_count_ = 0; // every frame we reset and re-draw
 
   uint32_t image_index = 0;
   VkSwapchainKHR swapchain = frame_resources_.swapchain();
@@ -300,6 +323,21 @@ void RendererBackend::set_view(float pan_x, float pan_y, float zoom) {
   update_frame_uniforms();
 }
 
+void RendererBackend::draw_rect(float x, float y, float w, float h,
+                                float r, float g, float b) {
+  if (staged_vertex_count_ + 6 > MAX_RECTS * 6) return;
+
+  Vertex *v = &staged_vertices_[staged_vertex_count_];
+  v[0] = {{x,     y    }, {r, g, b}};
+  v[1] = {{x + w, y    }, {r, g, b}};
+  v[2] = {{x + w, y - h}, {r, g, b}};
+  v[3] = {{x,     y    }, {r, g, b}};
+  v[4] = {{x + w, y - h}, {r, g, b}};
+  v[5] = {{x,     y - h}, {r, g, b}};
+  staged_vertex_count_ += 6;
+}
+
+
 bool RendererBackend::create_command_pool() {
   VkCommandPoolCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -349,31 +387,12 @@ void RendererBackend::recreate_frame_resources() {
 }
 
 bool RendererBackend::build_geometry() {
-  static constexpr Vertex vertices[] = {
-      {{0.0f, 0.65f}, {1.0f, 0.0f, 0.0f}},
-      {{-0.7f, -0.55f}, {0.0f, 1.0f, 0.0f}},
-      {{0.7f, -0.55f}, {0.0f, 0.0f, 1.0f}},
-  };
+  const VkDeviceSize buffer_size = sizeof(Vertex) * MAX_RECTS * 6; // Pre-allocate based on max number of vertices
 
-  const VkDeviceSize buffer_size = sizeof(vertices);
-  if (!create_buffer(buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+  return create_buffer(buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     vertex_buffer_, vertex_buffer_memory_)) {
-    return false;
-  }
-
-  void *data = nullptr;
-  if (!check_vk(vkMapMemory(context_.device(), vertex_buffer_memory_, 0,
-                            buffer_size, 0, &data),
-                "failed to map Vulkan vertex buffer")) {
-    return false;
-  }
-  std::memcpy(data, vertices, sizeof(vertices));
-  vkUnmapMemory(context_.device(), vertex_buffer_memory_);
-
-  vertex_count_ = static_cast<uint32_t>(sizeof(vertices) / sizeof(vertices[0]));
-  return true;
+                     vertex_buffer_, vertex_buffer_memory_);
 }
 
 bool RendererBackend::build_uniforms() {

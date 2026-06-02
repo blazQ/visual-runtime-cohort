@@ -30,11 +30,19 @@ struct ViewState {
   float zoom;
 };
 
-struct BackgroundColor {
+struct Color {
   float r, g, b;
 };
 
-constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
+struct Rectangle {
+  float top_left_corner_x;
+  float top_left_corner_y;
+  float width;
+  float height;
+  Color color;
+};
+
+constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 6;
 
 struct VisualRuntimeAPI {
   uint32_t abi_version;
@@ -45,8 +53,9 @@ struct VisualRuntimeAPI {
   void (*resize)(VisualRuntimeState *, uint32_t, uint32_t);
   void (*update)(VisualRuntimeState *, float);
   void (*shutdown)(VisualRuntimeState *);
-  void (*set_background_color)(VisualRuntimeState *, const BackgroundColor *);
+  void (*set_background_color)(VisualRuntimeState *, const Color *);
   void (*set_view)(VisualRuntimeState *, const ViewState *);
+  void (*draw_rectangle)(VisualRuntimeState *, const Rectangle *);
 };
 
 extern "C" {

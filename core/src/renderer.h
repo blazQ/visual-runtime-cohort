@@ -2,6 +2,7 @@
 
 #include "visual_runtime/api.h"
 
+#include <cstdint>
 #include <memory>
 
 struct RendererBackend;
@@ -21,6 +22,7 @@ struct Renderer {
   void shutdown();
   void set_background_color(float r, float g, float b);
   void set_view(float pan_x, float pan_y, float zoom);
+  void draw_rect(float top_left_x, float top_left_y, float width, float height, float r, float g, float b);
 
 private:
   std::unique_ptr<RendererBackend> backend_;

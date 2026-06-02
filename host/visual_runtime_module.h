@@ -65,7 +65,7 @@ struct VisualRuntimeModule {
     initialized_ = false;
   }
 
-  void setBackgroundColor(const BackgroundColor &color) const {
+  void setBackgroundColor(const Color &color) const {
     if (initialized_ && api_.set_background_color)
       api_.set_background_color(&state_, &color);
   }
@@ -73,6 +73,12 @@ struct VisualRuntimeModule {
   void setView(const ViewState &view) const {
     if (initialized_ && api_.set_view)
       api_.set_view(&state_, &view);
+  }
+
+  void drawRect(const Rectangle &rect) const {
+    if (initialized_ && api_.draw_rectangle){
+      api_.draw_rectangle(&state_, &rect);
+    }
   }
 
   uint64_t frameCount() const { return state_.frame_count; }
