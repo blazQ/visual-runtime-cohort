@@ -1,5 +1,6 @@
 #pragma once
 
+#include "frame_config.h"
 #include "visual_runtime/api.h"
 
 #include <memory>
@@ -17,7 +18,7 @@ struct Renderer {
 
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
-  void change_view(const VRTViewChange *change);
+  void set_frame_config(const FrameConfig &frame_config);
   void render_frame(float t);
   void shutdown();
 

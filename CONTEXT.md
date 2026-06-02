@@ -81,7 +81,7 @@ The visual runtime's internal retained visual state derived from Visual Runtime 
 _Avoid_: product scene, harness world, backend state
 
 **Frame Config**:
-Product-shaped frame-level visual settings used by renderer backends, such as clear color or viewport-sized frame inputs. Frame config can be shared before richer product concepts exist because it describes frame intent rather than generic GPU resources. Its expected home is the runtime partition, not a renderer backend partition.
+Product-shaped frame-level visual settings used by renderer backends, such as clear color or current view presentation. Frame config is the visual runtime's canonical frame intent; backend-specific shader uniforms or upload caches are implementation details derived from it. Its expected home is the runtime partition, not a renderer backend partition.
 _Avoid_: pipeline config, render pass descriptor, backend settings
 
 **Runtime Partition**:

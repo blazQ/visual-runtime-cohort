@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "view_state.h"
 #include "visual_runtime/api.h"
 
 #include <cstdio>
@@ -11,7 +12,11 @@ namespace {
 class VisualRuntime {
 public:
   explicit VisualRuntime(VRTSurfaceDescriptor *surface) {
+    if (surface) {
+      view_state_.resize(surface->metrics);
+    }
     renderer_.init(surface);
+    sync_frame_config();
     std::printf("[visual-runtime] init\n");
     std::fflush(stdout);
   }
@@ -21,10 +26,18 @@ public:
   VisualRuntime(const VisualRuntime &) = delete;
   VisualRuntime &operator=(const VisualRuntime &) = delete;
 
-  void resize(const VRTSurfaceMetrics &metrics) { renderer_.resize(&metrics); }
+  void resize(const VRTSurfaceMetrics &metrics) {
+    const bool view_changed = view_state_.resize(metrics);
+    renderer_.resize(&metrics);
+    if (view_changed) {
+      sync_frame_config();
+    }
+  }
 
   void change_view(const VRTViewChange &change) {
-    renderer_.change_view(&change);
+    if (view_state_.change_view(change)) {
+      sync_frame_config();
+    }
   }
 
   void update(float dt) {
@@ -34,6 +47,11 @@ public:
   }
 
 private:
+  void sync_frame_config() {
+    renderer_.set_frame_config(view_state_.frame_config());
+  }
+
+  ViewState view_state_;
   Renderer renderer_;
   uint64_t frame_count_ = 0;
   float elapsed_time_ = 0.0f;

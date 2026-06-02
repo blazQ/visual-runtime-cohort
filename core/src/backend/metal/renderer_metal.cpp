@@ -7,10 +7,8 @@
 #include "Metal/Metal.hpp"
 #include "QuartzCore/QuartzCore.hpp"
 
-#include <cmath>
 #include <cstddef>
 #include <cstdio>
-#include <glm/ext/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 
 namespace {
@@ -47,7 +45,7 @@ void print_error(const char *context, NS::Error *error) {
 struct RendererBackend {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
-  void change_view(const VRTViewChange *change);
+  void set_frame_config(const FrameConfig &frame_config);
   void render_frame(float t);
   void shutdown();
 
@@ -55,10 +53,7 @@ private:
   bool build_pipeline();
   bool build_geometry();
   bool build_uniforms();
-  bool has_screen_metrics() const;
-  void apply_zoom(const VRTViewChange &change);
-  void apply_pan(const VRTViewChange &change);
-  void update_frame_uniforms();
+  void update_frame_uniforms(const FrameConfig &frame_config);
 
   CA::MetalLayer *layer_ = nullptr;
   MTL::Device *device_ = nullptr;
@@ -69,7 +64,6 @@ private:
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
   NS::UInteger vertex_count_ = 0;
   VRTSurfaceMetrics metrics_{};
-  glm::dmat4 view_matrix_{1.0};
 };
 
 Renderer::Renderer() = default;
@@ -90,9 +84,9 @@ void Renderer::resize(const VRTSurfaceMetrics *metrics) {
   }
 }
 
-void Renderer::change_view(const VRTViewChange *change) {
+void Renderer::set_frame_config(const FrameConfig &frame_config) {
   if (backend_) {
-    backend_->change_view(change);
+    backend_->set_frame_config(frame_config);
   }
 }
 
@@ -161,56 +155,10 @@ void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
   }
 
   metrics_ = *metrics;
-  update_frame_uniforms();
 }
 
-void RendererBackend::change_view(const VRTViewChange *change) {
-  if (!change || change->reserved != 0 || !has_screen_metrics()) {
-    return;
-  }
-
-  bool changed = false;
-
-  if ((change->flags & VRTViewChange_Zoom) != 0) {
-    apply_zoom(*change);
-    changed = true;
-  }
-
-  if ((change->flags & VRTViewChange_Pan) != 0) {
-    apply_pan(*change);
-    changed = true;
-  }
-
-  if (changed) {
-    update_frame_uniforms();
-  }
-}
-
-bool RendererBackend::has_screen_metrics() const {
-  return metrics_.screen_width > 0.0 && metrics_.screen_height > 0.0;
-}
-
-void RendererBackend::apply_zoom(const VRTViewChange &change) {
-  const double scale = std::exp(change.zoom_delta_log_scale);
-  const double anchor_x =
-      (2.0 * change.zoom_anchor_x_screen / metrics_.screen_width) - 1.0;
-  const double anchor_y =
-      1.0 - (2.0 * change.zoom_anchor_y_screen / metrics_.screen_height);
-
-  view_matrix_ =
-      glm::translate(glm::dmat4(1.0), glm::dvec3(anchor_x, anchor_y, 0.0)) *
-      glm::scale(glm::dmat4(1.0), glm::dvec3(scale, scale, 1.0)) *
-      glm::translate(glm::dmat4(1.0), glm::dvec3(-anchor_x, -anchor_y, 0.0)) *
-      view_matrix_;
-}
-
-void RendererBackend::apply_pan(const VRTViewChange &change) {
-  const double ndc_x = 2.0 * change.pan_x_screen / metrics_.screen_width;
-  const double ndc_y = -2.0 * change.pan_y_screen / metrics_.screen_height;
-
-  view_matrix_ =
-      glm::translate(glm::dmat4(1.0), glm::dvec3(ndc_x, ndc_y, 0.0)) *
-      view_matrix_;
+void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
+  update_frame_uniforms(frame_config);
 }
 
 void RendererBackend::render_frame(float t) {
@@ -346,30 +294,16 @@ bool RendererBackend::build_uniforms() {
     return false;
   }
 
-  update_frame_uniforms();
   return true;
 }
 
-void RendererBackend::update_frame_uniforms() {
+void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
   if (!frame_uniform_buffer_) {
     return;
   }
 
   FrameUniforms uniforms{};
-  glm::mat4 aspect_matrix{1.0f};
-
-  if (metrics_.pixel_width > 0 && metrics_.pixel_height > 0) {
-    const float aspect = static_cast<float>(metrics_.pixel_width) /
-                         static_cast<float>(metrics_.pixel_height);
-
-    if (aspect >= 1.0f) {
-      aspect_matrix[0][0] = 1.0f / aspect;
-    } else {
-      aspect_matrix[1][1] = aspect;
-    }
-  }
-
-  uniforms.matrix = glm::mat4(view_matrix_) * aspect_matrix;
+  uniforms.matrix = frame_config.view_proj_transform;
 
   auto *contents =
       static_cast<FrameUniforms *>(frame_uniform_buffer_->contents());

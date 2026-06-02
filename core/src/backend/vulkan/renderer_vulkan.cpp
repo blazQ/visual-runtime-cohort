@@ -37,6 +37,7 @@ struct FrameUniforms {
 struct RendererBackend {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
+  void set_frame_config(const FrameConfig &frame_config);
   void render_frame(float t);
   void shutdown();
 
@@ -56,7 +57,7 @@ private:
                      VkMemoryPropertyFlags properties, VkBuffer &buffer,
                      VkDeviceMemory &memory);
   bool record_clear_commands(uint32_t image_index);
-  void update_frame_uniforms();
+  void update_frame_uniforms(const FrameConfig &frame_config);
   void destroy_pipeline();
   void destroy_swapchain();
   void destroy_buffer(VkBuffer &buffer, VkDeviceMemory &memory);
@@ -98,9 +99,10 @@ void Renderer::resize(const VRTSurfaceMetrics *metrics) {
   }
 }
 
-void Renderer::change_view(const VRTViewChange *) {
-  // View changes are implemented by the Metal backend first. Vulkan keeps the
-  // API boundary compatible until the cohort adds matching behavior there.
+void Renderer::set_frame_config(const FrameConfig &frame_config) {
+  if (backend_) {
+    backend_->set_frame_config(frame_config);
+  }
 }
 
 void Renderer::render_frame(float t) {
@@ -145,8 +147,6 @@ void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
 
   render_width_ = width;
   render_height_ = height;
-  update_frame_uniforms();
-
   if (context_.device() == VK_NULL_HANDLE || width == 0 || height == 0) {
     return;
   }
@@ -159,6 +159,10 @@ void RendererBackend::resize(const VRTSurfaceMetrics *metrics) {
       recreate_frame_resources();
     }
   }
+}
+
+void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
+  update_frame_uniforms(frame_config);
 }
 
 void RendererBackend::render_frame(float t) {
@@ -358,7 +362,6 @@ bool RendererBackend::build_uniforms() {
     return false;
   }
 
-  update_frame_uniforms();
   return true;
 }
 
@@ -585,23 +588,13 @@ bool RendererBackend::record_clear_commands(uint32_t image_index) {
                   "failed to record Vulkan command buffer");
 }
 
-void RendererBackend::update_frame_uniforms() {
+void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
   if (frame_uniform_buffer_memory_ == VK_NULL_HANDLE) {
     return;
   }
 
   FrameUniforms uniforms{};
-
-  if (render_width_ > 0 && render_height_ > 0) {
-    const float aspect =
-        static_cast<float>(render_width_) / static_cast<float>(render_height_);
-
-    if (aspect >= 1.0f) {
-      uniforms.matrix[0][0] = 1.0f / aspect;
-    } else {
-      uniforms.matrix[1][1] = aspect;
-    }
-  }
+  uniforms.matrix = frame_config.view_proj_transform;
   uniforms.matrix[1][1] *= -1.0f;
 
   void *data = nullptr;
