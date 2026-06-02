@@ -61,7 +61,7 @@ void VisualRuntimeHost::tick(float dt) {
     return;
 
   if (module_->reloadIfChanged()) {
-    std::printf("[host] reloaded (frame %llu)\n", module_->frameCount());
+    std::printf("[host] reloaded\n");
   }
   module_->tick(dt);
 }
@@ -72,8 +72,7 @@ bool VisualRuntimeHost::reload() {
 
   bool ok = module_->reload();
   if (ok) {
-    std::printf("[host] manually reloaded (frame %llu)\n",
-                module_->frameCount());
+    std::printf("[host] manually reloaded\n");
   }
   return ok;
 }

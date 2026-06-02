@@ -2,8 +2,7 @@
 #include <cstdint>
 
 struct VisualRuntimeState {
-  uint64_t frame_count;
-  float elapsed_time;
+  void *runtime;
 };
 
 enum class SurfaceKind : uint32_t {

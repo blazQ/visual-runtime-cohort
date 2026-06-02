@@ -211,7 +211,7 @@ int main() {
 
   while (!glfwWindowShouldClose(window)) {
     if (runtime.reloadIfChanged()) {
-      std::printf("[host] reloaded (frame %llu)\n", runtime.frameCount());
+      std::printf("[host] reloaded\n");
     }
 
     auto now = clock::now();
@@ -222,8 +222,7 @@ int main() {
     glfwPollEvents();
   }
 
-  std::printf("[glfw-minimal] exiting after %llu frames\n",
-              runtime.frameCount());
+  std::printf("[glfw-minimal] exiting\n");
   glfwDestroyWindow(window);
   glfwTerminate();
   return 0;

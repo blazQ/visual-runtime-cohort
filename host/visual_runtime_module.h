@@ -3,7 +3,6 @@
 #include "dynamic_library.h"
 #include "visual_runtime_api.h"
 
-#include <cstdint>
 #include <utility>
 
 struct VisualRuntimeModule {
@@ -57,8 +56,9 @@ struct VisualRuntimeModule {
   }
 
   void tick(float dt) const {
-    if (api_.update)
-      api_.update(&state_, dt);
+    if (!initialized_ || !api_.update)
+      return;
+    api_.update(&state_, dt);
   }
 
   void shutdown() const {
@@ -68,8 +68,6 @@ struct VisualRuntimeModule {
       api_.shutdown(&state_);
     initialized_ = false;
   }
-
-  uint64_t frameCount() const { return state_.frame_count; }
 
   const char *backendName() const {
     return api_.backend_name ? api_.backend_name : "Unknown";
