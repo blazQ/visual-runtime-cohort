@@ -116,12 +116,12 @@ struct MetalView: NSViewRepresentable {
             let dt = lastTime == 0 ? 0.0 : now - lastTime
             lastTime = now
 
-            if dt > 0, abs(pendingScrollZoom) > minimumPendingScrollZoom {
+            if dt > 0, Swift.abs(pendingScrollZoom) > minimumPendingScrollZoom {
                 let blend = 1.0 - exp(-dt / scrollZoomTimeConstant)
                 let zoomStep = pendingScrollZoom * blend
                 pendingScrollZoom -= zoomStep
                 session.zoomViewBy(logScale: zoomStep, anchor: scrollZoomAnchor)
-            } else if abs(pendingScrollZoom) <= minimumPendingScrollZoom {
+            } else if Swift.abs(pendingScrollZoom) <= minimumPendingScrollZoom {
                 pendingScrollZoom = 0
             }
 

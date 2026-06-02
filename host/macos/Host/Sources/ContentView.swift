@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 
 public struct ContentView: View {
-    let session: VisualRuntimeSession
+    private let session: VisualRuntimeSession
     @State private var lastPanTranslation: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
 
     public init(session: VisualRuntimeSession) {
         self.session = session
@@ -30,17 +31,24 @@ public struct ContentView: View {
             KeyHandlingView(session: session)
                 .frame(width: 0, height: 0)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("drag to pan, scroll to zoom, q to close, r to reload")
-                Text("backend: \(session.backendName)")
-            }
-            .font(.body.monospaced().weight(.medium))
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
-            .padding(12)
-            .allowsHitTesting(false)
+            ControlsView(
+                backendName: session.backendName,
+                onZoomIn: { zoom(by: 1.25) },
+                onZoomOut: { zoom(by: 0.8) }
+            )
+        }
+        .onGeometryChange(for: CGSize.self, of: \.size) { newSize in
+            viewportSize = newSize
         }
         .frame(minWidth: 800, minHeight: 600)
+    }
+
+    private func zoom(by scale: Double) {
+        guard viewportSize.width > 0, viewportSize.height > 0 else { return }
+        session.zoomViewBy(
+            scale: scale,
+            anchor: CGPoint(x: viewportSize.width / 2, y: viewportSize.height / 2)
+        )
     }
 }
 
