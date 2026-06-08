@@ -8,7 +8,7 @@ struct VRTState {
   void *runtime;
 };
 
-constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 6;
+constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
 
 struct VRTAPI {
   uint32_t abi_version;
