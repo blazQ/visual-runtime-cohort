@@ -44,6 +44,13 @@ struct VisualRuntimeModule {
       api_.change_view(&state_, &change);
   }
 
+  bool screenToWorld(const VRTScreenPoint &screen,
+                     VRTWorldPoint &world) const {
+    if (!initialized_ || !api_.screen_to_world)
+      return false;
+    return api_.screen_to_world(&state_, &screen, &world);
+  }
+
   void upsertShape(const VRTShapeDescriptor &shape) const {
     if (initialized_ && api_.upsert_shape)
       api_.upsert_shape(&state_, &shape);

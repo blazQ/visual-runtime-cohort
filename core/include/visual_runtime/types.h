@@ -57,6 +57,16 @@ struct VRTVec2 {
   double y;
 };
 
+struct VRTScreenPoint {
+  double x_screen;
+  double y_screen;
+};
+
+struct VRTWorldPoint {
+  double x_world;
+  double y_world;
+};
+
 struct VRTColorRGBA {
   float r;
   float g;

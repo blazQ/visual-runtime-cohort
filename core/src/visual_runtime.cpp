@@ -131,8 +131,6 @@ public:
     }
     renderer_.init(surface);
     sync_frame_config();
-    std::printf("[visual-runtime] init\n");
-    std::fflush(stdout);
   }
 
   ~VisualRuntime() {
@@ -155,6 +153,10 @@ public:
     if (view_state_.change_view(change)) {
       sync_frame_config();
     }
+  }
+
+  bool screen_to_world(const VRTScreenPoint &screen, VRTWorldPoint &world) {
+    return view_state_.screen_to_world(screen, world);
   }
 
   void set_scene_settings(const VRTSceneSettings &settings) {
@@ -243,6 +245,15 @@ void change_view(VRTState *state, const VRTViewChange *change) {
   }
 }
 
+// Map a surface-local screen point into the runtime's retained world space.
+bool screen_to_world(VRTState *state, const VRTScreenPoint *screen,
+                     VRTWorldPoint *world) {
+  if (auto *rt = runtime(state); rt && screen && world) {
+    return rt->screen_to_world(*screen, *world);
+  }
+  return false;
+}
+
 // Forward product-shaped scene shape updates across the C boundary.
 void upsert_shape(VRTState *state, const VRTShapeDescriptor *shape) {
   if (auto *rt = runtime(state); rt && shape) {
@@ -274,8 +285,9 @@ const VRTAPI *visual_runtime_get_api() {
       VISUAL_RUNTIME_API_VERSION,  sizeof(VRTAPI),
       VISUAL_RUNTIME_BACKEND_NAME, api_callbacks::init,
       api_callbacks::resize,       api_callbacks::set_scene_settings,
-      api_callbacks::change_view,  api_callbacks::upsert_shape,
-      api_callbacks::update,       api_callbacks::shutdown,
+      api_callbacks::change_view,  api_callbacks::screen_to_world,
+      api_callbacks::upsert_shape, api_callbacks::update,
+      api_callbacks::shutdown,
   };
   return &api;
 }

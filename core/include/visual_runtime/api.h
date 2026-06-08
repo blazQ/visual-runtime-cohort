@@ -19,6 +19,7 @@ struct VRTAPI {
   void (*resize)(VRTState *, const VRTSurfaceMetrics *);
   void (*set_scene_settings)(VRTState *, const VRTSceneSettings *);
   void (*change_view)(VRTState *, const VRTViewChange *);
+  bool (*screen_to_world)(VRTState *, const VRTScreenPoint *, VRTWorldPoint *);
   void (*upsert_shape)(VRTState *, const VRTShapeDescriptor *);
   void (*update)(VRTState *, float);
   void (*shutdown)(VRTState *);

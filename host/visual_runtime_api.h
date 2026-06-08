@@ -25,9 +25,9 @@ inline bool visual_runtime_api_valid(const VRTAPI &api) {
                  "[visual_runtime_api] missing required backend_name field\n");
     return false;
   }
-  if (!api.init || !api.change_view || !api.update) {
+  if (!api.init || !api.change_view || !api.screen_to_world || !api.update) {
     std::fprintf(stderr,
-                 "[visual_runtime_api] missing required lifecycle functions\n");
+                 "[visual_runtime_api] missing required API functions\n");
     return false;
   }
   return true;
