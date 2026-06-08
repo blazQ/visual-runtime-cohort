@@ -23,6 +23,11 @@ using visual_runtime::vulkan::VulkanFrameResources;
 using visual_runtime::vulkan::VulkanPipeline;
 using visual_runtime::vulkan::VulkanPipelineConfig;
 
+using DrawableDesc = Renderer::DrawableDesc;
+using DrawableHandle = Renderer::DrawableHandle;
+using DrawableState = Renderer::DrawableState;
+using Vertex = Renderer::Vertex;
+
 struct FrameUniforms {
   glm::mat4 matrix{1.0f};
 };
@@ -101,22 +106,20 @@ void Renderer::set_frame_config(const FrameConfig &frame_config) {
   }
 }
 
-renderer::DrawableHandle
-Renderer::create_drawable(const renderer::DrawableDesc &) {
+Renderer::DrawableHandle Renderer::create_drawable(const DrawableDesc &) {
   return {};
 }
 
-void Renderer::update_drawable(renderer::DrawableHandle,
-                               const renderer::DrawableState &) {}
+void Renderer::update_drawable(DrawableHandle, const DrawableState &) {}
 
-void Renderer::destroy_drawable(renderer::DrawableHandle) {}
+void Renderer::destroy_drawable(DrawableHandle) {}
 
 bool Renderer::begin_frame(float t) {
   render_frame(t);
   return false;
 }
 
-void Renderer::draw(renderer::DrawableHandle) {}
+void Renderer::draw(DrawableHandle) {}
 
 void Renderer::end_frame() {}
 
@@ -343,7 +346,7 @@ void RendererBackend::recreate_frame_resources() {
 }
 
 bool RendererBackend::build_geometry() {
-  const renderer::Vertex vertices[] = {
+  const Vertex vertices[] = {
       {glm::vec2{0.0f, 0.65f}, glm::vec4{1.0f, 0.0f, 0.0f, 1.0f}},
       {glm::vec2{-0.7f, -0.55f}, glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}},
       {glm::vec2{0.7f, -0.55f}, glm::vec4{0.0f, 0.0f, 1.0f, 1.0f}},
@@ -450,9 +453,9 @@ bool RendererBackend::build_pipeline() {
   config.color_format = frame_resources_.format();
   config.vertex_shader_path = VRT_VULKAN_VERTEX_SPV_PATH;
   config.fragment_shader_path = VRT_VULKAN_FRAGMENT_SPV_PATH;
-  config.vertex_stride = sizeof(renderer::Vertex);
-  config.position_offset = offsetof(renderer::Vertex, position);
-  config.color_offset = offsetof(renderer::Vertex, color);
+  config.vertex_stride = sizeof(Vertex);
+  config.position_offset = offsetof(Vertex, position);
+  config.color_offset = offsetof(Vertex, color);
 
   return pipeline_.create(context_, config);
 }

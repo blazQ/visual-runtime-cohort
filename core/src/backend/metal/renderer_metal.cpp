@@ -38,6 +38,11 @@ struct Drawable {
   NS::UInteger vertex_count = 0;
 };
 
+using DrawableDesc = Renderer::DrawableDesc;
+using DrawableHandle = Renderer::DrawableHandle;
+using DrawableState = Renderer::DrawableState;
+using Vertex = Renderer::Vertex;
+
 void print_error(const char *context, NS::Error *error) {
   if (!error) {
     std::fprintf(stderr, "[renderer] %s\n", context);
@@ -55,12 +60,11 @@ struct RendererBackend {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
-  renderer::DrawableHandle create_drawable(const renderer::DrawableDesc &desc);
-  void update_drawable(renderer::DrawableHandle handle,
-                       const renderer::DrawableState &state);
-  void destroy_drawable(renderer::DrawableHandle handle);
+  DrawableHandle create_drawable(const DrawableDesc &desc);
+  void update_drawable(DrawableHandle handle, const DrawableState &state);
+  void destroy_drawable(DrawableHandle handle);
   bool begin_frame(float t);
-  void draw(renderer::DrawableHandle handle);
+  void draw(DrawableHandle handle);
   void end_frame();
   void render_frame(float t);
   void shutdown();
@@ -69,7 +73,7 @@ private:
   bool build_pipeline();
   bool build_uniforms();
   void update_frame_uniforms(const FrameConfig &frame_config);
-  Drawable *drawable_for(renderer::DrawableHandle handle);
+  Drawable *drawable_for(DrawableHandle handle);
 
   CA::MetalLayer *layer_ = nullptr;
   MTL::Device *device_ = nullptr;
@@ -110,20 +114,18 @@ void Renderer::set_frame_config(const FrameConfig &frame_config) {
   }
 }
 
-renderer::DrawableHandle
-Renderer::create_drawable(const renderer::DrawableDesc &desc) {
-  return backend_ ? backend_->create_drawable(desc)
-                  : renderer::DrawableHandle{};
+Renderer::DrawableHandle Renderer::create_drawable(const DrawableDesc &desc) {
+  return backend_ ? backend_->create_drawable(desc) : DrawableHandle{};
 }
 
-void Renderer::update_drawable(renderer::DrawableHandle handle,
-                               const renderer::DrawableState &state) {
+void Renderer::update_drawable(DrawableHandle handle,
+                               const DrawableState &state) {
   if (backend_) {
     backend_->update_drawable(handle, state);
   }
 }
 
-void Renderer::destroy_drawable(renderer::DrawableHandle handle) {
+void Renderer::destroy_drawable(DrawableHandle handle) {
   if (backend_) {
     backend_->destroy_drawable(handle);
   }
@@ -133,7 +135,7 @@ bool Renderer::begin_frame(float t) {
   return backend_ ? backend_->begin_frame(t) : false;
 }
 
-void Renderer::draw(renderer::DrawableHandle handle) {
+void Renderer::draw(DrawableHandle handle) {
   if (backend_) {
     backend_->draw(handle);
   }
@@ -217,13 +219,12 @@ void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
   update_frame_uniforms(frame_config_);
 }
 
-renderer::DrawableHandle
-RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
+DrawableHandle RendererBackend::create_drawable(const DrawableDesc &desc) {
   if (!device_ || !desc.vertices || desc.vertex_count == 0) {
     return {};
   }
 
-  const size_t byte_count = desc.vertex_count * sizeof(renderer::Vertex);
+  const size_t byte_count = desc.vertex_count * sizeof(Vertex);
   MTL::Buffer *vertex_buffer = device_->newBuffer(
       desc.vertices, byte_count, MTL::ResourceStorageModeShared);
   if (!vertex_buffer) {
@@ -250,7 +251,7 @@ RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
       [](const Drawable &stored) { return stored.vertex_buffer == nullptr; });
   if (empty_slot != drawables_.end()) {
     *empty_slot = drawable;
-    return renderer::DrawableHandle{
+    return DrawableHandle{
         static_cast<uint32_t>((empty_slot - drawables_.begin()) + 1),
     };
   }
@@ -262,13 +263,13 @@ RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
   }
 
   drawables_.push_back(drawable);
-  return renderer::DrawableHandle{
+  return DrawableHandle{
       static_cast<uint32_t>(drawables_.size()),
   };
 }
 
-void RendererBackend::update_drawable(renderer::DrawableHandle handle,
-                                      const renderer::DrawableState &state) {
+void RendererBackend::update_drawable(DrawableHandle handle,
+                                      const DrawableState &state) {
   Drawable *drawable = drawable_for(handle);
   if (!drawable || !drawable->state_buffer) {
     return;
@@ -281,7 +282,7 @@ void RendererBackend::update_drawable(renderer::DrawableHandle handle,
   contents->color = state.color;
 }
 
-void RendererBackend::destroy_drawable(renderer::DrawableHandle handle) {
+void RendererBackend::destroy_drawable(DrawableHandle handle) {
   Drawable *drawable = drawable_for(handle);
   if (!drawable) {
     return;
@@ -347,7 +348,7 @@ bool RendererBackend::begin_frame(float t) {
   return true;
 }
 
-void RendererBackend::draw(renderer::DrawableHandle handle) {
+void RendererBackend::draw(DrawableHandle handle) {
   Drawable *drawable = drawable_for(handle);
   if (!frame_encoder_ || !drawable || !drawable->vertex_buffer ||
       drawable->vertex_count == 0) {
@@ -421,11 +422,11 @@ bool RendererBackend::build_pipeline() {
   MTL::VertexDescriptor *vertex_desc = MTL::VertexDescriptor::alloc()->init();
   auto *position_attr = vertex_desc->attributes()->object(0);
   position_attr->setFormat(MTL::VertexFormatFloat2);
-  position_attr->setOffset(offsetof(renderer::Vertex, position));
+  position_attr->setOffset(offsetof(Vertex, position));
   position_attr->setBufferIndex(0);
 
   auto *vertex_layout = vertex_desc->layouts()->object(0);
-  vertex_layout->setStride(sizeof(renderer::Vertex));
+  vertex_layout->setStride(sizeof(Vertex));
   vertex_layout->setStepFunction(MTL::VertexStepFunctionPerVertex);
   vertex_layout->setStepRate(1);
 
@@ -470,7 +471,7 @@ void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
   *contents = uniforms;
 }
 
-Drawable *RendererBackend::drawable_for(renderer::DrawableHandle handle) {
+Drawable *RendererBackend::drawable_for(DrawableHandle handle) {
   if (handle.value == 0 || handle.value > drawables_.size()) {
     return nullptr;
   }

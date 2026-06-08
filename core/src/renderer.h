@@ -12,31 +12,27 @@
 
 struct RendererBackend;
 
-namespace renderer {
-
-struct Vertex {
-  glm::vec2 position{};
-  glm::vec4 color{};
-};
-
-// Zero is invalid so default construction can represent "no drawable".
-struct DrawableHandle {
-  uint32_t value = 0;
-};
-
-struct DrawableDesc {
-  const Vertex *vertices = nullptr;
-  size_t vertex_count = 0;
-};
-
-struct DrawableState {
-  glm::mat4 model_transform{1.0f};
-  glm::vec4 color{1.0f};
-};
-
-} // namespace renderer
-
 struct Renderer {
+  struct Vertex {
+    glm::vec2 position{};
+    glm::vec4 color{};
+  };
+
+  // Zero is invalid so default construction can represent "no drawable".
+  struct DrawableHandle {
+    uint32_t value = 0;
+  };
+
+  struct DrawableDesc {
+    const Vertex *vertices = nullptr;
+    size_t vertex_count = 0;
+  };
+
+  struct DrawableState {
+    glm::mat4 model_transform{1.0f};
+    glm::vec4 color{1.0f};
+  };
+
   Renderer();
   ~Renderer();
 
@@ -48,12 +44,11 @@ struct Renderer {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
-  renderer::DrawableHandle create_drawable(const renderer::DrawableDesc &desc);
-  void update_drawable(renderer::DrawableHandle handle,
-                       const renderer::DrawableState &state);
-  void destroy_drawable(renderer::DrawableHandle handle);
+  DrawableHandle create_drawable(const DrawableDesc &desc);
+  void update_drawable(DrawableHandle handle, const DrawableState &state);
+  void destroy_drawable(DrawableHandle handle);
   bool begin_frame(float t);
-  void draw(renderer::DrawableHandle handle);
+  void draw(DrawableHandle handle);
   void end_frame();
   void render_frame(float t);
   void shutdown();

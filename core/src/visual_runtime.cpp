@@ -42,13 +42,13 @@ bool scene_settings_equal(const VRTSceneSettings &lhs,
 constexpr glm::vec4 kPlaceholderColor{1.0f};
 
 // Shared local geometry; rectangle placement and color live in drawable state.
-constexpr std::array<renderer::Vertex, 6> kQuadVertices{{
-    renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
-    renderer::Vertex{glm::vec2{0.5f, -0.5f}, kPlaceholderColor},
-    renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
-    renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
-    renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
-    renderer::Vertex{glm::vec2{-0.5f, 0.5f}, kPlaceholderColor},
+constexpr std::array<Renderer::Vertex, 6> kQuadVertices{{
+    Renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
+    Renderer::Vertex{glm::vec2{0.5f, -0.5f}, kPlaceholderColor},
+    Renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
+    Renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
+    Renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
+    Renderer::Vertex{glm::vec2{-0.5f, 0.5f}, kPlaceholderColor},
 }};
 
 class ShapeStore {
@@ -64,7 +64,7 @@ public:
                        return record.descriptor.id == id;
                      });
     const auto make_state = [&shape]() {
-      return renderer::DrawableState{
+      return Renderer::DrawableState{
           glm::translate(glm::mat4{1.0f},
                          glm::vec3{static_cast<float>(shape.center_world.x),
                                    static_cast<float>(shape.center_world.y),
@@ -86,7 +86,7 @@ public:
       return;
     }
 
-    const renderer::DrawableDesc drawable_desc{
+    const Renderer::DrawableDesc drawable_desc{
         kQuadVertices.data(),
         kQuadVertices.size(),
     };
@@ -114,7 +114,7 @@ public:
 private:
   struct ShapeRecord {
     VRTShapeDescriptor descriptor{};
-    renderer::DrawableHandle drawable{};
+    Renderer::DrawableHandle drawable{};
   };
 
   std::vector<ShapeRecord> shapes_;
