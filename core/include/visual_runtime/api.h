@@ -8,7 +8,7 @@ struct VRTState {
   void *runtime;
 };
 
-constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
+constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 6;
 
 struct VRTAPI {
   uint32_t abi_version;
@@ -19,6 +19,7 @@ struct VRTAPI {
   void (*resize)(VRTState *, const VRTSurfaceMetrics *);
   void (*set_scene_settings)(VRTState *, const VRTSceneSettings *);
   void (*change_view)(VRTState *, const VRTViewChange *);
+  void (*upsert_shape)(VRTState *, const VRTShapeDescriptor *);
   void (*update)(VRTState *, float);
   void (*shutdown)(VRTState *);
 };

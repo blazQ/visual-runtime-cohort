@@ -44,6 +44,11 @@ struct VisualRuntimeModule {
       api_.change_view(&state_, &change);
   }
 
+  void upsertShape(const VRTShapeDescriptor &shape) const {
+    if (initialized_ && api_.upsert_shape)
+      api_.upsert_shape(&state_, &shape);
+  }
+
   bool reloadIfChanged() {
     if (!lib_.changed())
       return false;

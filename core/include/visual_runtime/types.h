@@ -46,11 +46,40 @@ struct VRTSurfaceDescriptor {
 
 // Basic value types ----------------------------------------------------------
 
+// Product-owned stable identity for retained visual runtime objects. The
+// visual runtime uses ids only to match later updates to earlier product
+// objects; it does not allocate ids or interpret their meaning. Zero is
+// reserved as an invalid id.
+using VRTId = uint64_t;
+
+struct VRTVec2 {
+  double x;
+  double y;
+};
+
 struct VRTColorRGBA {
   float r;
   float g;
   float b;
   float a;
+};
+
+// Scene shapes ---------------------------------------------------------------
+
+enum class VRTShapeKind : uint32_t {
+  Rectangle = 1,
+};
+
+// Product-shaped request to create or replace scene shape content. Positions
+// and sizes are in world units and are independent from the current surface,
+// pixel density, or view transform.
+struct VRTShapeDescriptor {
+  VRTId id;
+  VRTShapeKind kind;
+  uint32_t reserved;
+  VRTVec2 center_world;
+  VRTVec2 size_world;
+  VRTColorRGBA color;
 };
 
 // Scene settings -------------------------------------------------------------

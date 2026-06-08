@@ -63,6 +63,13 @@ void VisualRuntimeHost::changeView(const VRTViewChange &change) {
   module_->changeView(change);
 }
 
+void VisualRuntimeHost::upsertShape(const VRTShapeDescriptor &shape) {
+  if (!module_)
+    return;
+
+  module_->upsertShape(shape);
+}
+
 void VisualRuntimeHost::tick(float dt) {
   if (!module_)
     return;

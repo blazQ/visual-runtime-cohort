@@ -2,8 +2,10 @@
 #include "view_state.h"
 #include "visual_runtime/api.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <glm/vec4.hpp>
+#include <vector>
 
 namespace {
 
@@ -12,14 +14,35 @@ glm::vec4 color_to_vec4(const VRTColorRGBA &color) {
 }
 
 bool color_equal(const VRTColorRGBA &lhs, const VRTColorRGBA &rhs) {
-  return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b &&
-         lhs.a == rhs.a;
+  return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
 }
 
 bool scene_settings_equal(const VRTSceneSettings &lhs,
                           const VRTSceneSettings &rhs) {
   return color_equal(lhs.background_color, rhs.background_color);
 }
+
+class ShapeStore {
+public:
+  void upsert(const VRTShapeDescriptor &shape) {
+    if (shape.id == 0) {
+      return;
+    }
+    auto existing_shape =
+        std::find_if(shapes_.begin(), shapes_.end(),
+                     [id = shape.id](const VRTShapeDescriptor &stored_shape) {
+                       return stored_shape.id == id;
+                     });
+    if (existing_shape != shapes_.end()) {
+      *existing_shape = shape;
+      return;
+    }
+    shapes_.push_back(shape);
+  }
+
+private:
+  std::vector<VRTShapeDescriptor> shapes_;
+};
 
 // Private C++ owner for one visual runtime instance. Think of
 // this as the real runtime object: it owns renderer-facing state and is where
@@ -63,6 +86,8 @@ public:
     sync_frame_config();
   }
 
+  void upsert_shape(const VRTShapeDescriptor &shape) { shapes_.upsert(shape); }
+
   void update(float dt) {
     frame_count_ += 1;
     elapsed_time_ += dt;
@@ -79,6 +104,7 @@ private:
   VRTSceneSettings scene_settings_{
       VRTColorRGBA{0.0f, 0.0f, 0.0f, 1.0f},
   };
+  ShapeStore shapes_;
   ViewState view_state_;
   Renderer renderer_;
   uint64_t frame_count_ = 0;
@@ -135,6 +161,13 @@ void change_view(VRTState *state, const VRTViewChange *change) {
   }
 }
 
+// Forward product-shaped scene shape updates across the C boundary.
+void upsert_shape(VRTState *state, const VRTShapeDescriptor *shape) {
+  if (auto *rt = runtime(state); rt && shape) {
+    rt->upsert_shape(*shape);
+  }
+}
+
 // Advance and render one runtime tick.
 void update(VRTState *state, float dt) {
   if (auto *rt = runtime(state)) {
@@ -159,8 +192,8 @@ const VRTAPI *visual_runtime_get_api() {
       VISUAL_RUNTIME_API_VERSION,  sizeof(VRTAPI),
       VISUAL_RUNTIME_BACKEND_NAME, api_callbacks::init,
       api_callbacks::resize,       api_callbacks::set_scene_settings,
-      api_callbacks::change_view,  api_callbacks::update,
-      api_callbacks::shutdown,
+      api_callbacks::change_view,  api_callbacks::upsert_shape,
+      api_callbacks::update,       api_callbacks::shutdown,
   };
   return &api;
 }

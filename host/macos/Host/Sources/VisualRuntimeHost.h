@@ -28,6 +28,7 @@ public:
   void resize(const VRTSurfaceMetrics &metrics);
   void setSceneSettings(const VRTSceneSettings &settings);
   void changeView(const VRTViewChange &change);
+  void upsertShape(const VRTShapeDescriptor &shape);
   void tick(float dt);
   bool reload();
   std::string backendName() const;
