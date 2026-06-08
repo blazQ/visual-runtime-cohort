@@ -83,6 +83,7 @@ private:
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
   NS::AutoreleasePool *frame_pool_ = nullptr;
   MTL::CommandBuffer *frame_command_ = nullptr;
+  MTL::CommandBuffer *last_command_buffer_ = nullptr;
   MTL::RenderCommandEncoder *frame_encoder_ = nullptr;
   CA::MetalDrawable *frame_drawable_ = nullptr;
   std::vector<Drawable> drawables_;
@@ -375,6 +376,11 @@ void RendererBackend::end_frame() {
 
   frame_encoder_->endEncoding();
   frame_command_->presentDrawable(frame_drawable_);
+  if (last_command_buffer_) {
+    last_command_buffer_->release();
+  }
+  last_command_buffer_ = frame_command_;
+  last_command_buffer_->retain();
   frame_command_->commit();
 
   frame_pool_->release();
@@ -409,6 +415,8 @@ bool RendererBackend::build_pipeline() {
       vertex_fn->release();
     if (fragment_fn)
       fragment_fn->release();
+    library_->release();
+    library_ = nullptr;
     return false;
   }
 
@@ -441,6 +449,8 @@ bool RendererBackend::build_pipeline() {
 
   if (!pipeline_) {
     print_error("failed to create render pipeline", error);
+    library_->release();
+    library_ = nullptr;
     return false;
   }
 
@@ -480,6 +490,11 @@ Drawable *RendererBackend::drawable_for(DrawableHandle handle) {
 
 void RendererBackend::shutdown() {
   end_frame();
+  if (last_command_buffer_) {
+    last_command_buffer_->waitUntilCompleted();
+    last_command_buffer_->release();
+    last_command_buffer_ = nullptr;
+  }
   if (frame_uniform_buffer_) {
     frame_uniform_buffer_->release();
     frame_uniform_buffer_ = nullptr;
