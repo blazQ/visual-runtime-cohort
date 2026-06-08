@@ -3,8 +3,7 @@ import SwiftUI
 struct ControlsView: View {
     let backendName: String
     @Binding var backgroundColor: Color
-    let onZoomIn: () -> Void
-    let onZoomOut: () -> Void
+    let onAction: (WorkspaceAction) -> Void
 
     var body: some View {
         ZStack {
@@ -12,16 +11,13 @@ struct ControlsView: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            ColorPicker("Background", selection: $backgroundColor, supportsOpacity: true)
-                .padding(10)
-                .compatGlassEffect(in: .capsule)
-                .accessibilityLabel("Background color")
+            ShapeToolbar(backgroundColor: $backgroundColor, onAction: onAction)
                 .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
             ZoomControls(
-                onZoomIn: onZoomIn,
-                onZoomOut: onZoomOut
+                onZoomIn: { onAction(.zoomIn) },
+                onZoomOut: { onAction(.zoomOut) }
             )
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -37,8 +33,7 @@ struct ControlsView: View {
         ControlsView(
             backendName: "preview",
             backgroundColor: .constant(.black),
-            onZoomIn: {},
-            onZoomOut: {}
+            onAction: { _ in }
         )
     }
     .frame(width: 800, height: 600)

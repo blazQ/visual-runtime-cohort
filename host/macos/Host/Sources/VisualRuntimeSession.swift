@@ -1,6 +1,7 @@
 import CoreGraphics
 import Darwin
 import QuartzCore
+import SwiftUI
 
 public final class VisualRuntimeSession {
   private var host: VisualRuntimeHost
@@ -40,6 +41,10 @@ public final class VisualRuntimeSession {
 
   func upsertShape(_ shape: ShapeDescriptor) {
     host.upsertShape(shape.rawValue)
+  }
+
+  func upsertShape(_ shape: SceneShape) {
+    upsertShape(ShapeDescriptor(shape))
   }
 
   func panViewBy(x: Double, y: Double) {
@@ -121,6 +126,16 @@ extension VisualRuntimeSession {
       self.color = color
     }
 
+    init(_ shape: SceneShape) {
+      self.init(
+        id: VRTId(shape.id),
+        kind: ShapeKind(shape.kind),
+        centerWorld: VRTVec2(x: Double(shape.center.x), y: Double(shape.center.y)),
+        sizeWorld: VRTVec2(x: Double(shape.size.width), y: Double(shape.size.height)),
+        color: ColorRGBA(shape.color)
+      )
+    }
+
     fileprivate var rawValue: VRTShapeDescriptor {
       VRTShapeDescriptor(
         id: id,
@@ -135,6 +150,13 @@ extension VisualRuntimeSession {
 
   enum ShapeKind: Equatable {
     case rectangle
+
+    init(_ kind: SceneShapeKind) {
+      switch kind {
+      case .rectangle:
+        self = .rectangle
+      }
+    }
 
     fileprivate var rawValue: VRTShapeKind {
       switch self {
@@ -181,6 +203,18 @@ extension VisualRuntimeSession {
       rawValue.zoom_anchor_x_screen = anchor.x
       rawValue.zoom_anchor_y_screen = anchor.y
     }
+  }
+}
+
+private extension VisualRuntimeSession.ColorRGBA {
+  init(_ color: Color) {
+    let components = color.linearRGBAComponents
+    self.init(
+      red: Float(components.red),
+      green: Float(components.green),
+      blue: Float(components.blue),
+      alpha: Float(components.alpha)
+    )
   }
 }
 
