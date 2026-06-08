@@ -48,15 +48,11 @@ bool VulkanPipeline::create(const VulkanContext &context,
   vertex_binding.stride = config.vertex_stride;
   vertex_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-  std::array<VkVertexInputAttributeDescription, 2> vertex_attributes{};
+  std::array<VkVertexInputAttributeDescription, 1> vertex_attributes{};
   vertex_attributes[0].location = 0;
   vertex_attributes[0].binding = 0;
   vertex_attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
   vertex_attributes[0].offset = config.position_offset;
-  vertex_attributes[1].location = 1;
-  vertex_attributes[1].binding = 0;
-  vertex_attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  vertex_attributes[1].offset = config.color_offset;
 
   VkPipelineVertexInputStateCreateInfo vertex_input{};
   vertex_input.sType =
@@ -115,6 +111,14 @@ bool VulkanPipeline::create(const VulkanContext &context,
   layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   layout_info.setLayoutCount = 1;
   layout_info.pSetLayouts = &config.descriptor_set_layout;
+  VkPushConstantRange push_constant{};
+  if (config.vertex_push_constant_size > 0) {
+    push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push_constant.offset = 0;
+    push_constant.size = config.vertex_push_constant_size;
+    layout_info.pushConstantRangeCount = 1;
+    layout_info.pPushConstantRanges = &push_constant;
+  }
 
   if (!check_vk(vkCreatePipelineLayout(context.device(), &layout_info, nullptr,
                                        &pipeline_layout_),

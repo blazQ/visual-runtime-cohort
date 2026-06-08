@@ -13,11 +13,28 @@
 #endif
 
 #include <cstdio>
+#include <cstring>
 #include <utility>
 
 namespace visual_runtime::vulkan {
 
 namespace {
+
+constexpr const char *kPortabilitySubsetExtensionName =
+    "VK_KHR_portability_subset";
+
+bool descriptor_indexing_features_supported(
+    const VkPhysicalDeviceFeatures2 &features,
+    const VkPhysicalDeviceDescriptorIndexingFeatures
+        &descriptor_indexing_features) {
+  return features.features.shaderStorageBufferArrayDynamicIndexing &&
+         descriptor_indexing_features.runtimeDescriptorArray &&
+         descriptor_indexing_features
+             .shaderStorageBufferArrayNonUniformIndexing &&
+         descriptor_indexing_features.descriptorBindingPartiallyBound &&
+         descriptor_indexing_features
+             .descriptorBindingStorageBufferUpdateAfterBind;
+}
 
 QueueFamilies find_queue_families(VkPhysicalDevice physical_device,
                                   VkSurfaceKHR surface) {
@@ -283,19 +300,26 @@ bool VulkanContext::physical_device_suitable(
     return false;
   }
 
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+  descriptor_indexing_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+
   VkPhysicalDeviceVulkan13Features vulkan13_features{};
   vulkan13_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13_features.pNext = &descriptor_indexing_features;
 
   VkPhysicalDeviceFeatures2 features{};
   features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   features.pNext = &vulkan13_features;
   vkGetPhysicalDeviceFeatures2(physical_device, &features);
   if (!vulkan13_features.dynamicRendering ||
-      !vulkan13_features.synchronization2) {
+      !vulkan13_features.synchronization2 ||
+      !descriptor_indexing_features_supported(features,
+                                              descriptor_indexing_features)) {
     std::fprintf(stderr,
-                 "[renderer] rejecting Vulkan device %s: dynamic rendering "
-                 "and synchronization2 are required\n",
+                 "[renderer] rejecting Vulkan device %s: dynamic rendering, "
+                 "synchronization2, and descriptor indexing are required\n",
                  properties.deviceName);
     return false;
   }
@@ -306,12 +330,10 @@ bool VulkanContext::physical_device_suitable(
   }
 
   device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-#if defined(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)
   if (extension_available(available_extensions,
-                          VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
-    device_extensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+                          kPortabilitySubsetExtensionName)) {
+    device_extensions.push_back(kPortabilitySubsetExtensionName);
   }
-#endif
 
   if (!required_extensions_available(
           available_extensions, device_extensions.data(),
@@ -365,15 +387,27 @@ bool VulkanContext::create_device() {
     queue_infos.push_back(queue_info);
   }
 
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+  descriptor_indexing_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
+  descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing =
+      VK_TRUE;
+  descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+  descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind =
+      VK_TRUE;
+
   VkPhysicalDeviceVulkan13Features vulkan13_features{};
   vulkan13_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13_features.pNext = &descriptor_indexing_features;
   vulkan13_features.dynamicRendering = VK_TRUE;
   vulkan13_features.synchronization2 = VK_TRUE;
 
   VkPhysicalDeviceFeatures2 features{};
   features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   features.pNext = &vulkan13_features;
+  features.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
 
   VkDeviceCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

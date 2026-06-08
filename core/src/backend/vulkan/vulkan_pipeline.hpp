@@ -15,7 +15,7 @@ struct VulkanPipelineConfig {
   const char *fragment_shader_path = nullptr;
   uint32_t vertex_stride = 0;
   uint32_t position_offset = 0;
-  uint32_t color_offset = 0;
+  uint32_t vertex_push_constant_size = 0;
 };
 
 class VulkanPipeline {

@@ -8,9 +8,12 @@
 
 #include <vulkan/vulkan.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace {
 
@@ -32,12 +35,54 @@ struct FrameUniforms {
   glm::mat4 matrix{1.0f};
 };
 
+struct DrawableUniforms {
+  glm::mat4 model_transform{1.0f};
+  glm::vec4 color{1.0f};
+};
+
+struct Drawable {
+  VkBuffer vertex_buffer = VK_NULL_HANDLE;
+  VkDeviceMemory vertex_buffer_memory = VK_NULL_HANDLE;
+  VkBuffer state_buffer = VK_NULL_HANDLE;
+  VkDeviceMemory state_buffer_memory = VK_NULL_HANDLE;
+  uint32_t vertex_count = 0;
+};
+
+struct DrawPush {
+  uint32_t drawable_index = 0;
+};
+
+struct ActiveFrame {
+  VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  uint32_t image_index = 0;
+  bool recreate_after_present = false;
+
+  bool active() const { return command_buffer != VK_NULL_HANDLE; }
+  void reset() {
+    command_buffer = VK_NULL_HANDLE;
+    swapchain = VK_NULL_HANDLE;
+    image_index = 0;
+    recreate_after_present = false;
+  }
+};
+
+constexpr uint32_t kMaxDrawables = 1024;
+constexpr uint32_t kFrameDescriptorBinding = 0;
+constexpr uint32_t kDrawableDescriptorBinding = 1;
+
 } // namespace
 
 struct RendererBackend {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
+  DrawableHandle create_drawable(const DrawableDesc &desc);
+  void update_drawable(DrawableHandle handle, const DrawableState &state);
+  void destroy_drawable(DrawableHandle handle);
+  bool begin_frame(float t);
+  void draw(DrawableHandle handle);
+  void end_frame();
   void render_frame(float t);
   void shutdown();
 
@@ -45,19 +90,24 @@ private:
   bool create_command_pool();
   bool create_sync_objects();
   bool create_frame_resources();
+  bool create_render_finished_semaphores();
   bool frame_resources_ready() const;
   void recreate_frame_resources();
-  bool build_geometry();
   bool build_uniforms();
   bool create_descriptor_layout();
   bool create_descriptor_pool();
-  bool create_descriptor_set();
+  bool create_frame_descriptor();
   bool build_pipeline();
   bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                      VkMemoryPropertyFlags properties, VkBuffer &buffer,
                      VkDeviceMemory &memory);
-  bool record_clear_commands(uint32_t image_index);
+  bool write_buffer(VkDeviceMemory memory, const void *contents,
+                    VkDeviceSize size, const char *context);
+  void write_drawable_descriptor(uint32_t drawable_index,
+                                 const Drawable &drawable);
   void update_frame_uniforms(const FrameConfig &frame_config);
+  Drawable *drawable_for(DrawableHandle handle);
+  void destroy_render_finished_semaphores();
   void destroy_pipeline();
   void destroy_swapchain();
   void destroy_buffer(VkBuffer &buffer, VkDeviceMemory &memory);
@@ -66,17 +116,16 @@ private:
   VulkanFrameResources frame_resources_{};
   VkCommandPool command_pool_ = VK_NULL_HANDLE;
   VkSemaphore image_available_ = VK_NULL_HANDLE;
-  VkSemaphore render_finished_ = VK_NULL_HANDLE;
+  std::vector<VkSemaphore> render_finished_semaphores_{};
   VkFence frame_in_flight_ = VK_NULL_HANDLE;
-  VkBuffer vertex_buffer_ = VK_NULL_HANDLE;
-  VkDeviceMemory vertex_buffer_memory_ = VK_NULL_HANDLE;
-  uint32_t vertex_count_ = 0;
   VkBuffer frame_uniform_buffer_ = VK_NULL_HANDLE;
   VkDeviceMemory frame_uniform_buffer_memory_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout descriptor_set_layout_ = VK_NULL_HANDLE;
   VkDescriptorPool descriptor_pool_ = VK_NULL_HANDLE;
   VkDescriptorSet descriptor_set_ = VK_NULL_HANDLE;
   VulkanPipeline pipeline_{};
+  std::vector<Drawable> drawables_;
+  ActiveFrame active_frame_{};
   uint32_t render_width_ = 0;
   uint32_t render_height_ = 0;
   FrameConfig frame_config_{};
@@ -106,22 +155,38 @@ void Renderer::set_frame_config(const FrameConfig &frame_config) {
   }
 }
 
-Renderer::DrawableHandle Renderer::create_drawable(const DrawableDesc &) {
-  return {};
+Renderer::DrawableHandle Renderer::create_drawable(const DrawableDesc &desc) {
+  return backend_ ? backend_->create_drawable(desc) : DrawableHandle{};
 }
 
-void Renderer::update_drawable(DrawableHandle, const DrawableState &) {}
+void Renderer::update_drawable(DrawableHandle handle,
+                               const DrawableState &state) {
+  if (backend_) {
+    backend_->update_drawable(handle, state);
+  }
+}
 
-void Renderer::destroy_drawable(DrawableHandle) {}
+void Renderer::destroy_drawable(DrawableHandle handle) {
+  if (backend_) {
+    backend_->destroy_drawable(handle);
+  }
+}
 
 bool Renderer::begin_frame(float t) {
-  render_frame(t);
-  return false;
+  return backend_ ? backend_->begin_frame(t) : false;
 }
 
-void Renderer::draw(DrawableHandle) {}
+void Renderer::draw(DrawableHandle handle) {
+  if (backend_) {
+    backend_->draw(handle);
+  }
+}
 
-void Renderer::end_frame() {}
+void Renderer::end_frame() {
+  if (backend_) {
+    backend_->end_frame();
+  }
+}
 
 void Renderer::render_frame(float t) {
   if (backend_) {
@@ -141,8 +206,8 @@ bool RendererBackend::init(VRTSurfaceDescriptor *surface) {
 
   if (!context_.init(surface) || !create_command_pool() ||
       !create_sync_objects() || !create_descriptor_layout() ||
-      !build_geometry() || !build_uniforms() || !create_descriptor_pool() ||
-      !create_descriptor_set()) {
+      !build_uniforms() || !create_descriptor_pool() ||
+      !create_frame_descriptor()) {
     shutdown();
     return false;
   }
@@ -184,39 +249,245 @@ void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
   update_frame_uniforms(frame_config_);
 }
 
-void RendererBackend::render_frame(float t) {
+DrawableHandle RendererBackend::create_drawable(const DrawableDesc &desc) {
+  if (context_.device() == VK_NULL_HANDLE || !desc.vertices ||
+      desc.vertex_count == 0) {
+    return {};
+  }
+
+  auto empty_slot = std::find_if(
+      drawables_.begin(), drawables_.end(), [](const Drawable &stored) {
+        return stored.vertex_buffer == VK_NULL_HANDLE;
+      });
+  const bool reusing_slot = empty_slot != drawables_.end();
+  if (!reusing_slot && drawables_.size() >= kMaxDrawables) {
+    return {};
+  }
+
+  const VkDeviceSize vertex_byte_count = desc.vertex_count * sizeof(Vertex);
+  Drawable drawable{};
+  if (!create_buffer(vertex_byte_count, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     drawable.vertex_buffer, drawable.vertex_buffer_memory) ||
+      !write_buffer(drawable.vertex_buffer_memory, desc.vertices,
+                    vertex_byte_count, "failed to map Vulkan vertex buffer") ||
+      !create_buffer(sizeof(DrawableUniforms),
+                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     drawable.state_buffer, drawable.state_buffer_memory)) {
+    destroy_buffer(drawable.vertex_buffer, drawable.vertex_buffer_memory);
+    destroy_buffer(drawable.state_buffer, drawable.state_buffer_memory);
+    return {};
+  }
+  drawable.vertex_count = static_cast<uint32_t>(desc.vertex_count);
+
+  if (reusing_slot) {
+    *empty_slot = drawable;
+    const uint32_t index =
+        static_cast<uint32_t>(empty_slot - drawables_.begin());
+    write_drawable_descriptor(index, drawable);
+    return DrawableHandle{index + 1};
+  }
+
+  drawables_.push_back(drawable);
+  const uint32_t index = static_cast<uint32_t>(drawables_.size() - 1);
+  write_drawable_descriptor(index, drawable);
+  return DrawableHandle{index + 1};
+}
+
+void RendererBackend::update_drawable(DrawableHandle handle,
+                                      const DrawableState &state) {
+  Drawable *drawable = drawable_for(handle);
+  if (!drawable || drawable->state_buffer_memory == VK_NULL_HANDLE) {
+    return;
+  }
+
+  const DrawableUniforms uniforms{
+      state.model_transform,
+      state.color,
+  };
+  write_buffer(drawable->state_buffer_memory, &uniforms, sizeof(uniforms),
+               "failed to map Vulkan drawable state buffer");
+}
+
+void RendererBackend::destroy_drawable(DrawableHandle handle) {
+  Drawable *drawable = drawable_for(handle);
+  if (!drawable) {
+    return;
+  }
+
+  destroy_buffer(drawable->vertex_buffer, drawable->vertex_buffer_memory);
+  destroy_buffer(drawable->state_buffer, drawable->state_buffer_memory);
+  drawable->vertex_count = 0;
+}
+
+bool RendererBackend::begin_frame(float t) {
   (void)t;
   if (render_width_ == 0 || render_height_ == 0 || !frame_resources_ready()) {
-    return;
+    return false;
   }
 
   if (!check_vk(vkWaitForFences(context_.device(), 1, &frame_in_flight_,
                                 VK_TRUE, UINT64_MAX),
                 "failed to wait for Vulkan frame fence")) {
-    return;
+    return false;
   }
 
-  uint32_t image_index = 0;
-  VkSwapchainKHR swapchain = frame_resources_.swapchain();
-  VkResult acquire_result =
-      vkAcquireNextImageKHR(context_.device(), swapchain, UINT64_MAX,
-                            image_available_, VK_NULL_HANDLE, &image_index);
+  active_frame_.swapchain = frame_resources_.swapchain();
+  VkResult acquire_result = vkAcquireNextImageKHR(
+      context_.device(), active_frame_.swapchain, UINT64_MAX, image_available_,
+      VK_NULL_HANDLE, &active_frame_.image_index);
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR) {
     recreate_frame_resources();
-    return;
+    return false;
   }
   if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR) {
     print_vk_error("failed to acquire Vulkan swapchain image", acquire_result);
-    return;
+    return false;
   }
-  const bool should_recreate_after_present =
-      acquire_result == VK_SUBOPTIMAL_KHR;
+  active_frame_.recreate_after_present = acquire_result == VK_SUBOPTIMAL_KHR;
 
-  if (!record_clear_commands(image_index)) {
+  const auto &command_buffers = frame_resources_.command_buffers();
+  const auto &swapchain_images = frame_resources_.images();
+  const auto &swapchain_image_views = frame_resources_.image_views();
+  const VkExtent2D swapchain_extent = frame_resources_.extent();
+  active_frame_.command_buffer = command_buffers[active_frame_.image_index];
+
+  if (!check_vk(vkResetCommandBuffer(active_frame_.command_buffer, 0),
+                "failed to reset Vulkan command buffer")) {
+    active_frame_.reset();
+    return false;
+  }
+
+  VkCommandBufferBeginInfo begin_info{};
+  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  if (!check_vk(vkBeginCommandBuffer(active_frame_.command_buffer, &begin_info),
+                "failed to begin Vulkan command buffer")) {
+    active_frame_.reset();
+    return false;
+  }
+
+  VkImageMemoryBarrier2 before_clear{};
+  before_clear.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  before_clear.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+  before_clear.srcAccessMask = VK_ACCESS_2_NONE;
+  before_clear.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  before_clear.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  before_clear.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  before_clear.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  before_clear.image = swapchain_images[active_frame_.image_index];
+  before_clear.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  before_clear.subresourceRange.baseMipLevel = 0;
+  before_clear.subresourceRange.levelCount = 1;
+  before_clear.subresourceRange.baseArrayLayer = 0;
+  before_clear.subresourceRange.layerCount = 1;
+
+  VkDependencyInfo before_dependency{};
+  before_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  before_dependency.imageMemoryBarrierCount = 1;
+  before_dependency.pImageMemoryBarriers = &before_clear;
+  vkCmdPipelineBarrier2(active_frame_.command_buffer, &before_dependency);
+
+  VkRenderingAttachmentInfo color_attachment{};
+  color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+  color_attachment.imageView = swapchain_image_views[active_frame_.image_index];
+  color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  const glm::vec4 &clear_color = frame_config_.clear_color;
+  color_attachment.clearValue.color = {
+      {clear_color.r, clear_color.g, clear_color.b, clear_color.a}};
+
+  VkRenderingInfo rendering_info{};
+  rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+  rendering_info.renderArea.offset = {0, 0};
+  rendering_info.renderArea.extent = swapchain_extent;
+  rendering_info.layerCount = 1;
+  rendering_info.colorAttachmentCount = 1;
+  rendering_info.pColorAttachments = &color_attachment;
+
+  vkCmdBeginRendering(active_frame_.command_buffer, &rendering_info);
+
+  VkViewport viewport{};
+  viewport.x = 0.0f;
+  viewport.y = static_cast<float>(swapchain_extent.height);
+  viewport.width = static_cast<float>(swapchain_extent.width);
+  viewport.height = -static_cast<float>(swapchain_extent.height);
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  vkCmdSetViewport(active_frame_.command_buffer, 0, 1, &viewport);
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = swapchain_extent;
+  vkCmdSetScissor(active_frame_.command_buffer, 0, 1, &scissor);
+
+  vkCmdBindPipeline(active_frame_.command_buffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_.pipeline());
+  vkCmdBindDescriptorSets(active_frame_.command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_.layout(),
+                          0, 1, &descriptor_set_, 0, nullptr);
+
+  return true;
+}
+
+void RendererBackend::draw(DrawableHandle handle) {
+  Drawable *drawable = drawable_for(handle);
+  if (!active_frame_.active() || !drawable ||
+      drawable->vertex_buffer == VK_NULL_HANDLE ||
+      drawable->vertex_count == 0) {
     return;
   }
+
+  VkDeviceSize vertex_offset = 0;
+  vkCmdBindVertexBuffers(active_frame_.command_buffer, 0, 1,
+                         &drawable->vertex_buffer, &vertex_offset);
+  const DrawPush push{handle.value - 1};
+  vkCmdPushConstants(active_frame_.command_buffer, pipeline_.layout(),
+                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+  vkCmdDraw(active_frame_.command_buffer, drawable->vertex_count, 1, 0, 0);
+}
+
+void RendererBackend::end_frame() {
+  if (!active_frame_.active()) {
+    return;
+  }
+
+  vkCmdEndRendering(active_frame_.command_buffer);
+
+  const auto &swapchain_images = frame_resources_.images();
+  VkImageMemoryBarrier2 before_present{};
+  before_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  before_present.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  before_present.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  before_present.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+  before_present.dstAccessMask = VK_ACCESS_2_NONE;
+  before_present.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  before_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  before_present.image = swapchain_images[active_frame_.image_index];
+  before_present.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  before_present.subresourceRange.baseMipLevel = 0;
+  before_present.subresourceRange.levelCount = 1;
+  before_present.subresourceRange.baseArrayLayer = 0;
+  before_present.subresourceRange.layerCount = 1;
+
+  VkDependencyInfo present_dependency{};
+  present_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  present_dependency.imageMemoryBarrierCount = 1;
+  present_dependency.pImageMemoryBarriers = &before_present;
+  vkCmdPipelineBarrier2(active_frame_.command_buffer, &present_dependency);
+
+  if (!check_vk(vkEndCommandBuffer(active_frame_.command_buffer),
+                "failed to record Vulkan command buffer")) {
+    active_frame_.reset();
+    return;
+  }
+
   if (!check_vk(vkResetFences(context_.device(), 1, &frame_in_flight_),
                 "failed to reset Vulkan frame fence")) {
+    active_frame_.reset();
     return;
   }
 
@@ -228,32 +499,43 @@ void RendererBackend::render_frame(float t) {
   submit_info.pWaitSemaphores = &image_available_;
   submit_info.pWaitDstStageMask = &wait_stage;
   submit_info.commandBufferCount = 1;
-  const auto &command_buffers = frame_resources_.command_buffers();
-  submit_info.pCommandBuffers = &command_buffers[image_index];
+  submit_info.pCommandBuffers = &active_frame_.command_buffer;
   submit_info.signalSemaphoreCount = 1;
-  submit_info.pSignalSemaphores = &render_finished_;
+  VkSemaphore render_finished =
+      render_finished_semaphores_[active_frame_.image_index];
+  submit_info.pSignalSemaphores = &render_finished;
 
   if (!check_vk(vkQueueSubmit(context_.graphics_queue(), 1, &submit_info,
                               frame_in_flight_),
                 "failed to submit Vulkan clear commands")) {
+    active_frame_.reset();
     return;
   }
 
   VkPresentInfoKHR present_info{};
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present_info.waitSemaphoreCount = 1;
-  present_info.pWaitSemaphores = &render_finished_;
+  present_info.pWaitSemaphores = &render_finished;
   present_info.swapchainCount = 1;
-  present_info.pSwapchains = &swapchain;
-  present_info.pImageIndices = &image_index;
+  present_info.pSwapchains = &active_frame_.swapchain;
+  present_info.pImageIndices = &active_frame_.image_index;
 
   VkResult present_result =
       vkQueuePresentKHR(context_.present_queue(), &present_info);
   if (present_result == VK_ERROR_OUT_OF_DATE_KHR ||
-      present_result == VK_SUBOPTIMAL_KHR || should_recreate_after_present) {
+      present_result == VK_SUBOPTIMAL_KHR ||
+      active_frame_.recreate_after_present) {
     recreate_frame_resources();
   } else if (present_result != VK_SUCCESS) {
     print_vk_error("failed to present Vulkan swapchain image", present_result);
+  }
+
+  active_frame_.reset();
+}
+
+void RendererBackend::render_frame(float t) {
+  if (begin_frame(t)) {
+    end_frame();
   }
 }
 
@@ -272,16 +554,17 @@ void RendererBackend::shutdown() {
       descriptor_set_layout_ = VK_NULL_HANDLE;
     }
     destroy_buffer(frame_uniform_buffer_, frame_uniform_buffer_memory_);
-    destroy_buffer(vertex_buffer_, vertex_buffer_memory_);
-    vertex_count_ = 0;
+    for (auto &drawable : drawables_) {
+      destroy_buffer(drawable.vertex_buffer, drawable.vertex_buffer_memory);
+      destroy_buffer(drawable.state_buffer, drawable.state_buffer_memory);
+      drawable.vertex_count = 0;
+    }
+    drawables_.clear();
+    destroy_render_finished_semaphores();
     destroy_swapchain();
     if (frame_in_flight_ != VK_NULL_HANDLE) {
       vkDestroyFence(context_.device(), frame_in_flight_, nullptr);
       frame_in_flight_ = VK_NULL_HANDLE;
-    }
-    if (render_finished_ != VK_NULL_HANDLE) {
-      vkDestroySemaphore(context_.device(), render_finished_, nullptr);
-      render_finished_ = VK_NULL_HANDLE;
     }
     if (image_available_ != VK_NULL_HANDLE) {
       vkDestroySemaphore(context_.device(), image_available_, nullptr);
@@ -293,6 +576,7 @@ void RendererBackend::shutdown() {
     }
   }
   context_.shutdown();
+  active_frame_.reset();
   render_width_ = 0;
   render_height_ = 0;
 }
@@ -319,58 +603,59 @@ bool RendererBackend::create_sync_objects() {
   return check_vk(vkCreateSemaphore(context_.device(), &semaphore_info, nullptr,
                                     &image_available_),
                   "failed to create Vulkan image-available semaphore") &&
-         check_vk(vkCreateSemaphore(context_.device(), &semaphore_info, nullptr,
-                                    &render_finished_),
-                  "failed to create Vulkan render-finished semaphore") &&
          check_vk(vkCreateFence(context_.device(), &fence_info, nullptr,
                                 &frame_in_flight_),
                   "failed to create Vulkan frame fence");
 }
 
 bool RendererBackend::create_frame_resources() {
-  return frame_resources_.create_frame_resources(
-      context_, command_pool_, render_width_, render_height_,
-      [this] { return build_pipeline(); }, [this] { destroy_pipeline(); });
+  if (!frame_resources_.create_frame_resources(
+          context_, command_pool_, render_width_, render_height_,
+          [this] { return build_pipeline(); },
+          [this] { destroy_pipeline(); })) {
+    return false;
+  }
+
+  return create_render_finished_semaphores();
+}
+
+bool RendererBackend::create_render_finished_semaphores() {
+  destroy_render_finished_semaphores();
+
+  VkSemaphoreCreateInfo semaphore_info{};
+  semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  render_finished_semaphores_.resize(frame_resources_.images().size());
+  for (VkSemaphore &semaphore : render_finished_semaphores_) {
+    if (!check_vk(vkCreateSemaphore(context_.device(), &semaphore_info, nullptr,
+                                    &semaphore),
+                  "failed to create Vulkan render-finished semaphore")) {
+      destroy_render_finished_semaphores();
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool RendererBackend::frame_resources_ready() const {
   return frame_resources_.frame_resources_ready() &&
          pipeline_.layout() != VK_NULL_HANDLE &&
-         pipeline_.pipeline() != VK_NULL_HANDLE;
+         pipeline_.pipeline() != VK_NULL_HANDLE &&
+         render_finished_semaphores_.size() == frame_resources_.images().size();
 }
 
 void RendererBackend::recreate_frame_resources() {
+  if (context_.device() != VK_NULL_HANDLE) {
+    vkDeviceWaitIdle(context_.device());
+  }
+  destroy_render_finished_semaphores();
   frame_resources_.recreate_frame_resources(
       context_, command_pool_, render_width_, render_height_,
       [this] { return build_pipeline(); }, [this] { destroy_pipeline(); });
-}
-
-bool RendererBackend::build_geometry() {
-  const Vertex vertices[] = {
-      {glm::vec2{0.0f, 0.65f}, glm::vec4{1.0f, 0.0f, 0.0f, 1.0f}},
-      {glm::vec2{-0.7f, -0.55f}, glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}},
-      {glm::vec2{0.7f, -0.55f}, glm::vec4{0.0f, 0.0f, 1.0f, 1.0f}},
-  };
-
-  const VkDeviceSize buffer_size = sizeof(vertices);
-  if (!create_buffer(buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     vertex_buffer_, vertex_buffer_memory_)) {
-    return false;
+  if (frame_resources_.frame_resources_ready()) {
+    create_render_finished_semaphores();
   }
-
-  void *data = nullptr;
-  if (!check_vk(vkMapMemory(context_.device(), vertex_buffer_memory_, 0,
-                            buffer_size, 0, &data),
-                "failed to map Vulkan vertex buffer")) {
-    return false;
-  }
-  std::memcpy(data, vertices, sizeof(vertices));
-  vkUnmapMemory(context_.device(), vertex_buffer_memory_);
-
-  vertex_count_ = static_cast<uint32_t>(sizeof(vertices) / sizeof(vertices[0]));
-  return true;
 }
 
 bool RendererBackend::build_uniforms() {
@@ -385,16 +670,33 @@ bool RendererBackend::build_uniforms() {
 }
 
 bool RendererBackend::create_descriptor_layout() {
-  VkDescriptorSetLayoutBinding frame_uniform_binding{};
-  frame_uniform_binding.binding = 0;
-  frame_uniform_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  frame_uniform_binding.descriptorCount = 1;
-  frame_uniform_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+  bindings[0].binding = kFrameDescriptorBinding;
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  bindings[1].binding = kDrawableDescriptorBinding;
+  bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  bindings[1].descriptorCount = kMaxDrawables;
+  bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+  std::array<VkDescriptorBindingFlags, 2> binding_flags{};
+  binding_flags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                     VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+
+  VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info{};
+  binding_flags_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+  binding_flags_info.bindingCount = static_cast<uint32_t>(binding_flags.size());
+  binding_flags_info.pBindingFlags = binding_flags.data();
 
   VkDescriptorSetLayoutCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  create_info.bindingCount = 1;
-  create_info.pBindings = &frame_uniform_binding;
+  create_info.pNext = &binding_flags_info;
+  create_info.flags =
+      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  create_info.bindingCount = static_cast<uint32_t>(bindings.size());
+  create_info.pBindings = bindings.data();
 
   return check_vk(vkCreateDescriptorSetLayout(context_.device(), &create_info,
                                               nullptr, &descriptor_set_layout_),
@@ -402,14 +704,17 @@ bool RendererBackend::create_descriptor_layout() {
 }
 
 bool RendererBackend::create_descriptor_pool() {
-  VkDescriptorPoolSize pool_size{};
-  pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  pool_size.descriptorCount = 1;
+  std::array<VkDescriptorPoolSize, 2> pool_sizes{};
+  pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  pool_sizes[0].descriptorCount = 1;
+  pool_sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  pool_sizes[1].descriptorCount = kMaxDrawables;
 
   VkDescriptorPoolCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  create_info.poolSizeCount = 1;
-  create_info.pPoolSizes = &pool_size;
+  create_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+  create_info.poolSizeCount = static_cast<uint32_t>(pool_sizes.size());
+  create_info.pPoolSizes = pool_sizes.data();
   create_info.maxSets = 1;
 
   return check_vk(vkCreateDescriptorPool(context_.device(), &create_info,
@@ -417,7 +722,7 @@ bool RendererBackend::create_descriptor_pool() {
                   "failed to create Vulkan descriptor pool");
 }
 
-bool RendererBackend::create_descriptor_set() {
+bool RendererBackend::create_frame_descriptor() {
   VkDescriptorSetAllocateInfo allocate_info{};
   allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   allocate_info.descriptorPool = descriptor_pool_;
@@ -438,7 +743,7 @@ bool RendererBackend::create_descriptor_set() {
   VkWriteDescriptorSet descriptor_write{};
   descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   descriptor_write.dstSet = descriptor_set_;
-  descriptor_write.dstBinding = 0;
+  descriptor_write.dstBinding = kFrameDescriptorBinding;
   descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   descriptor_write.descriptorCount = 1;
   descriptor_write.pBufferInfo = &buffer_info;
@@ -455,7 +760,7 @@ bool RendererBackend::build_pipeline() {
   config.fragment_shader_path = VRT_VULKAN_FRAGMENT_SPV_PATH;
   config.vertex_stride = sizeof(Vertex);
   config.position_offset = offsetof(Vertex, position);
-  config.color_offset = offsetof(Vertex, color);
+  config.vertex_push_constant_size = sizeof(DrawPush);
 
   return pipeline_.create(context_, config);
 }
@@ -503,110 +808,40 @@ bool RendererBackend::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                   "failed to bind Vulkan buffer memory");
 }
 
-bool RendererBackend::record_clear_commands(uint32_t image_index) {
-  const auto &command_buffers = frame_resources_.command_buffers();
-  const auto &swapchain_images = frame_resources_.images();
-  const auto &swapchain_image_views = frame_resources_.image_views();
-  const VkExtent2D swapchain_extent = frame_resources_.extent();
-  VkCommandBuffer command_buffer = command_buffers[image_index];
-
-  if (!check_vk(vkResetCommandBuffer(command_buffer, 0),
-                "failed to reset Vulkan command buffer")) {
+bool RendererBackend::write_buffer(VkDeviceMemory memory, const void *contents,
+                                   VkDeviceSize size, const char *context) {
+  void *data = nullptr;
+  if (!check_vk(vkMapMemory(context_.device(), memory, 0, size, 0, &data),
+                context)) {
     return false;
   }
+  std::memcpy(data, contents, static_cast<size_t>(size));
+  vkUnmapMemory(context_.device(), memory);
+  return true;
+}
 
-  VkCommandBufferBeginInfo begin_info{};
-  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  if (!check_vk(vkBeginCommandBuffer(command_buffer, &begin_info),
-                "failed to begin Vulkan command buffer")) {
-    return false;
+void RendererBackend::write_drawable_descriptor(uint32_t drawable_index,
+                                                const Drawable &drawable) {
+  if (descriptor_set_ == VK_NULL_HANDLE ||
+      drawable.state_buffer == VK_NULL_HANDLE) {
+    return;
   }
 
-  VkImageMemoryBarrier2 before_clear{};
-  before_clear.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  before_clear.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-  before_clear.srcAccessMask = VK_ACCESS_2_NONE;
-  before_clear.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  before_clear.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  before_clear.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  before_clear.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  before_clear.image = swapchain_images[image_index];
-  before_clear.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  before_clear.subresourceRange.baseMipLevel = 0;
-  before_clear.subresourceRange.levelCount = 1;
-  before_clear.subresourceRange.baseArrayLayer = 0;
-  before_clear.subresourceRange.layerCount = 1;
+  VkDescriptorBufferInfo buffer_info{};
+  buffer_info.buffer = drawable.state_buffer;
+  buffer_info.offset = 0;
+  buffer_info.range = sizeof(DrawableUniforms);
 
-  VkDependencyInfo before_dependency{};
-  before_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  before_dependency.imageMemoryBarrierCount = 1;
-  before_dependency.pImageMemoryBarriers = &before_clear;
-  vkCmdPipelineBarrier2(command_buffer, &before_dependency);
+  VkWriteDescriptorSet descriptor_write{};
+  descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptor_write.dstSet = descriptor_set_;
+  descriptor_write.dstBinding = kDrawableDescriptorBinding;
+  descriptor_write.dstArrayElement = drawable_index;
+  descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  descriptor_write.descriptorCount = 1;
+  descriptor_write.pBufferInfo = &buffer_info;
 
-  VkRenderingAttachmentInfo color_attachment{};
-  color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-  color_attachment.imageView = swapchain_image_views[image_index];
-  color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  const glm::vec4 &clear_color = frame_config_.clear_color;
-  color_attachment.clearValue.color = {
-      {clear_color.r, clear_color.g, clear_color.b, clear_color.a}};
-
-  VkRenderingInfo rendering_info{};
-  rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-  rendering_info.renderArea.offset = {0, 0};
-  rendering_info.renderArea.extent = swapchain_extent;
-  rendering_info.layerCount = 1;
-  rendering_info.colorAttachmentCount = 1;
-  rendering_info.pColorAttachments = &color_attachment;
-
-  vkCmdBeginRendering(command_buffer, &rendering_info);
-
-  VkViewport viewport{};
-  viewport.x = 0.0f;
-  viewport.y = 0.0f;
-  viewport.width = static_cast<float>(swapchain_extent.width);
-  viewport.height = static_cast<float>(swapchain_extent.height);
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-  vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-
-  VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = swapchain_extent;
-  vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-
-  VkDeviceSize vertex_offset = 0;
-  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipeline_.pipeline());
-  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipeline_.layout(), 0, 1, &descriptor_set_, 0,
-                          nullptr);
-  vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer_, &vertex_offset);
-  vkCmdDraw(command_buffer, vertex_count_, 1, 0, 0);
-
-  vkCmdEndRendering(command_buffer);
-
-  VkImageMemoryBarrier2 before_present{};
-  before_present.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  before_present.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  before_present.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  before_present.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-  before_present.dstAccessMask = VK_ACCESS_2_NONE;
-  before_present.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  before_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  before_present.image = swapchain_images[image_index];
-  before_present.subresourceRange = before_clear.subresourceRange;
-
-  VkDependencyInfo present_dependency{};
-  present_dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  present_dependency.imageMemoryBarrierCount = 1;
-  present_dependency.pImageMemoryBarriers = &before_present;
-  vkCmdPipelineBarrier2(command_buffer, &present_dependency);
-
-  return check_vk(vkEndCommandBuffer(command_buffer),
-                  "failed to record Vulkan command buffer");
+  vkUpdateDescriptorSets(context_.device(), 1, &descriptor_write, 0, nullptr);
 }
 
 void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
@@ -616,16 +851,30 @@ void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
 
   FrameUniforms uniforms{};
   uniforms.matrix = frame_config.view_proj_transform;
-  uniforms.matrix[1][1] *= -1.0f;
 
-  void *data = nullptr;
-  if (!check_vk(vkMapMemory(context_.device(), frame_uniform_buffer_memory_, 0,
-                            sizeof(FrameUniforms), 0, &data),
-                "failed to map Vulkan frame uniform buffer")) {
+  write_buffer(frame_uniform_buffer_memory_, &uniforms, sizeof(uniforms),
+               "failed to map Vulkan frame uniform buffer");
+}
+
+Drawable *RendererBackend::drawable_for(DrawableHandle handle) {
+  if (handle.value == 0 || handle.value > drawables_.size()) {
+    return nullptr;
+  }
+  return &drawables_[handle.value - 1];
+}
+
+void RendererBackend::destroy_render_finished_semaphores() {
+  if (context_.device() == VK_NULL_HANDLE) {
+    render_finished_semaphores_.clear();
     return;
   }
-  std::memcpy(data, &uniforms, sizeof(uniforms));
-  vkUnmapMemory(context_.device(), frame_uniform_buffer_memory_);
+
+  for (VkSemaphore semaphore : render_finished_semaphores_) {
+    if (semaphore != VK_NULL_HANDLE) {
+      vkDestroySemaphore(context_.device(), semaphore, nullptr);
+    }
+  }
+  render_finished_semaphores_.clear();
 }
 
 void RendererBackend::destroy_pipeline() { pipeline_.destroy(context_); }
