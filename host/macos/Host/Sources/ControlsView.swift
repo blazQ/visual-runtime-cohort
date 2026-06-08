@@ -11,7 +11,7 @@ struct ControlsView: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            ShapeToolbar(backgroundColor: $backgroundColor, onAction: onAction)
+            MainToolbar(backgroundColor: $backgroundColor, onAction: onAction)
                 .padding(16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 

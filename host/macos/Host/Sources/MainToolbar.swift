@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct ShapeToolbar: View {
+struct MainToolbar: View {
     @Binding var backgroundColor: Color
     let onAction: (WorkspaceAction) -> Void
 
@@ -53,7 +53,7 @@ struct ShapeToolbar: View {
         Rectangle()
             .fill(.black.gradient)
 
-        ShapeToolbar(backgroundColor: .constant(.black), onAction: { _ in })
+        MainToolbar(backgroundColor: .constant(.black), onAction: { _ in })
     }
     .frame(width: 420, height: 160)
 }

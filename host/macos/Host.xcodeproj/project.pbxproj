@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		082442986B221D14D4EAE0BD /* ShapeToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6643AB87DCE8A63A05E43B10 /* ShapeToolbar.swift */; };
+		25F9DB051CA7A169A4AA520B /* MainToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC966C88879154DF222BA43F /* MainToolbar.swift */; };
 		40FF1658BFD0BBC6FB19D60C /* KeyHandlingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B25C049CDD38B6AFC0399B7 /* KeyHandlingView.swift */; };
 		423DE287FC3C7405F4F98900 /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A55960B3D57A4250A15A344 /* StatusView.swift */; };
 		4CE72FF03A4DDD8FDD5384C6 /* HostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91BA84221B4E24E635865A12 /* HostTests.swift */; };
@@ -79,13 +79,13 @@
 		534722799557D5292D03F32D /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		618C0A0B230819D0FCE5D324 /* Host-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Host-Info.plist"; sourceTree = "<group>"; };
 		65259F6A577BBD04858099C4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		6643AB87DCE8A63A05E43B10 /* ShapeToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeToolbar.swift; sourceTree = "<group>"; };
 		69F2F2EED12074247AFBF3E6 /* HostApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostApp.swift; sourceTree = "<group>"; };
 		6B045050D61FACD3BE88C6FE /* TuistAssets+Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistAssets+Host.swift"; sourceTree = "<group>"; };
 		70BB7C340B025E99C40526F1 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		76E179070A6C025D18FA5837 /* PreviewSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewSupport.swift; sourceTree = "<group>"; };
 		8B25C049CDD38B6AFC0399B7 /* KeyHandlingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyHandlingView.swift; sourceTree = "<group>"; };
 		91BA84221B4E24E635865A12 /* HostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostTests.swift; sourceTree = "<group>"; };
+		AC966C88879154DF222BA43F /* MainToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainToolbar.swift; sourceTree = "<group>"; };
 		C9956EB9C4A063FCB1080CD8 /* TuistBundle+Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TuistBundle+Host.swift"; sourceTree = "<group>"; };
 		D99F89A6271CF73BA7EBE8DE /* Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compatibility.swift; sourceTree = "<group>"; };
 		E5C30C3C0858BE1948CFD5DF /* HostTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HostTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -173,10 +173,10 @@
 				E865383EF5D888002C869858 /* ControlsView.swift */,
 				69F2F2EED12074247AFBF3E6 /* HostApp.swift */,
 				8B25C049CDD38B6AFC0399B7 /* KeyHandlingView.swift */,
+				AC966C88879154DF222BA43F /* MainToolbar.swift */,
 				207B3F5735B750FEE8EA169D /* MetalView.swift */,
 				76E179070A6C025D18FA5837 /* PreviewSupport.swift */,
 				48B6624C46AF2EB6122CB44F /* SceneModel.swift */,
-				6643AB87DCE8A63A05E43B10 /* ShapeToolbar.swift */,
 				3A55960B3D57A4250A15A344 /* StatusView.swift */,
 				0C577130AAC57CD92A319056 /* VisualRuntimeHost.cpp */,
 				E75AB131DBA5C3D6D21D3A16 /* VisualRuntimeHost.h */,
@@ -334,10 +334,10 @@
 				995862F5AEB78875544175A9 /* ControlsView.swift in Sources */,
 				9FB37E91F19733B15CC52A5D /* HostApp.swift in Sources */,
 				40FF1658BFD0BBC6FB19D60C /* KeyHandlingView.swift in Sources */,
+				25F9DB051CA7A169A4AA520B /* MainToolbar.swift in Sources */,
 				5E8D965A63C82BF231F0891D /* MetalView.swift in Sources */,
 				BBA80CA2E060BA3A9288FD7D /* PreviewSupport.swift in Sources */,
 				F0A4895D19AA51629B8E664C /* SceneModel.swift in Sources */,
-				082442986B221D14D4EAE0BD /* ShapeToolbar.swift in Sources */,
 				423DE287FC3C7405F4F98900 /* StatusView.swift in Sources */,
 				B907021AB06AD23A39C64AAA /* VisualRuntimeHost.cpp in Sources */,
 				C3D13808AFEA86E378A43033 /* VisualRuntimeSession.swift in Sources */,
