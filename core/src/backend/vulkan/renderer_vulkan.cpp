@@ -106,6 +106,9 @@ Renderer::create_drawable(const renderer::DrawableDesc &) {
   return {};
 }
 
+void Renderer::update_drawable(renderer::DrawableHandle,
+                               const renderer::DrawableState &) {}
+
 void Renderer::destroy_drawable(renderer::DrawableHandle) {}
 
 bool Renderer::begin_frame(float t) {

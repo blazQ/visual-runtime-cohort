@@ -52,6 +52,26 @@ _Avoid_: runtime renderer mode, host backend
 The product-shaped interface of the visual runtime for creating and updating visual state. It uses product terminology rather than generic renderer concepts unless the product itself needs those concepts. Callers use the API without knowing whether or how the runtime retains visual state internally. In the current harness, this API may begin as an internal runtime seam before being exposed across the visual runtime API boundary.
 _Avoid_: renderer API, RHI, backend API, premature mesh/material/object API
 
+**Shape Upsert**:
+A product-shaped request to create or replace scene shape content with a caller-chosen identity. Shape upserts describe the intended visual content in product terms and do not expose how the visual runtime stores or draws that content.
+_Avoid_: draw command, renderer object, GPU resource update
+
+**World Unit**:
+A scene-space unit used to describe retained visual content independently from the current surface size, pixel density, or camera/view. World units are not screen units, physical pixels, or normalized device coordinates.
+_Avoid_: screen point, framebuffer pixel, clip-space coordinate
+
+**World-Space Rectangle**:
+An axis-aligned rectangle in world units, described by its center position and size. It belongs to the scene rather than to the current viewport.
+_Avoid_: screen-space rectangle, viewport overlay, pixel bounds
+
+**World Transform**:
+A shape-owned transform that maps the shape's local geometry into world space. For simple shapes, the world transform may carry placement and size while the local geometry stays canonical.
+_Avoid_: local transform, baked vertex position, viewport transform
+
+**Canonical Rectangle Geometry**:
+The reusable local-space rectangle shape before placement, sizing, or view projection is applied. Future stable local attributes, such as default texture coordinates, belong to this geometry rather than to the world transform.
+_Avoid_: pre-positioned rectangle vertices, per-instance rectangle mesh, world-space quad
+
 **View Intent Delta**:
 An already-interpreted visual change request passed to the visual runtime, such as a pan or zoom delta. Product and input logic decide the delta; the visual runtime applies it to its retained visual intention without owning raw input interpretation, acceleration, or smoothing policy.
 _Avoid_: raw gesture, input event, animation policy, smoothing command
@@ -91,6 +111,14 @@ _Avoid_: harness UI parity, identical app shell
 **Render World**:
 The visual runtime's internal retained visual state derived from Visual Runtime API calls and consumed by renderer backends each frame. The render world is not exposed to the harness as a data structure and should not force product-facing concepts before product features require them.
 _Avoid_: product scene, harness world, backend state
+
+**Drawable Instance**:
+Renderer-owned state for one retained visual item. A drawable instance may cache geometry, transform, color, or backend upload state, but it should not prevent the visual runtime from sharing canonical geometry or other reusable resources as the renderer model matures.
+_Avoid_: public scene object, permanent unique mesh, harness-owned resource
+
+**Drawable Instance State**:
+The renderer-facing state for one drawable instance, derived from the render world and updated without changing canonical geometry. For rectangles, instance state includes the world transform and color.
+_Avoid_: baked vertex attributes, product shape descriptor, backend-only cache
 
 **Frame Config**:
 Product-shaped frame-level visual settings used by renderer backends, such as clear color or current view presentation. Frame config is the visual runtime's canonical frame intent; backend-specific shader uniforms or upload caches are implementation details derived from it. Its expected home is the runtime partition, not a renderer backend partition.

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <memory>
@@ -28,6 +29,11 @@ struct DrawableDesc {
   size_t vertex_count = 0;
 };
 
+struct DrawableState {
+  glm::mat4 world_transform{1.0f};
+  glm::vec4 color{1.0f};
+};
+
 } // namespace renderer
 
 struct Renderer {
@@ -43,6 +49,8 @@ struct Renderer {
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
   renderer::DrawableHandle create_drawable(const renderer::DrawableDesc &desc);
+  void update_drawable(renderer::DrawableHandle handle,
+                       const renderer::DrawableState &state);
   void destroy_drawable(renderer::DrawableHandle handle);
   bool begin_frame(float t);
   void draw(renderer::DrawableHandle handle);

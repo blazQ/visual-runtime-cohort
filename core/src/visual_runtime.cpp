@@ -5,7 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <vector>
 
@@ -19,62 +22,79 @@ bool color_equal(const VRTColorRGBA &lhs, const VRTColorRGBA &rhs) {
   return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
 }
 
+bool vec2_equal(const VRTVec2 &lhs, const VRTVec2 &rhs) {
+  return lhs.x == rhs.x && lhs.y == rhs.y;
+}
+
+bool shape_equal(const VRTShapeDescriptor &lhs, const VRTShapeDescriptor &rhs) {
+  return lhs.id == rhs.id && lhs.kind == rhs.kind &&
+         lhs.reserved == rhs.reserved &&
+         vec2_equal(lhs.center_world, rhs.center_world) &&
+         vec2_equal(lhs.size_world, rhs.size_world) &&
+         color_equal(lhs.color, rhs.color);
+}
+
 bool scene_settings_equal(const VRTSceneSettings &lhs,
                           const VRTSceneSettings &rhs) {
   return color_equal(lhs.background_color, rhs.background_color);
 }
 
-std::array<renderer::Vertex, 6>
-rectangle_vertices(const VRTShapeDescriptor &shape) {
-  const glm::vec2 center{
-      static_cast<float>(shape.center_world.x),
-      static_cast<float>(shape.center_world.y),
-  };
-  const glm::vec2 half_size{
-      static_cast<float>(shape.size_world.x * 0.5),
-      static_cast<float>(shape.size_world.y * 0.5),
-  };
-  const glm::vec2 min = center - half_size;
-  const glm::vec2 max = center + half_size;
-  const glm::vec4 color = color_to_vec4(shape.color);
+constexpr glm::vec4 kPlaceholderColor{1.0f};
 
-  return {{
-      renderer::Vertex{min, color},
-      renderer::Vertex{glm::vec2{max.x, min.y}, color},
-      renderer::Vertex{max, color},
-      renderer::Vertex{min, color},
-      renderer::Vertex{max, color},
-      renderer::Vertex{glm::vec2{min.x, max.y}, color},
-  }};
-}
+// Shared local geometry; rectangle placement and color live in drawable state.
+constexpr std::array<renderer::Vertex, 6> kQuadVertices{{
+    renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
+    renderer::Vertex{glm::vec2{0.5f, -0.5f}, kPlaceholderColor},
+    renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
+    renderer::Vertex{glm::vec2{-0.5f, -0.5f}, kPlaceholderColor},
+    renderer::Vertex{glm::vec2{0.5f, 0.5f}, kPlaceholderColor},
+    renderer::Vertex{glm::vec2{-0.5f, 0.5f}, kPlaceholderColor},
+}};
 
 class ShapeStore {
 public:
   void upsert(const VRTShapeDescriptor &shape, Renderer &renderer) {
-    if (shape.id == 0) {
+    if (shape.id == 0 || shape.kind != VRTShapeKind::Rectangle) {
       return;
     }
-    auto vertices = rectangle_vertices(shape);
-    const renderer::DrawableDesc drawable_desc{
-        vertices.data(),
-        vertices.size(),
-    };
 
     auto existing_shape =
         std::find_if(shapes_.begin(), shapes_.end(),
                      [id = shape.id](const ShapeRecord &record) {
                        return record.descriptor.id == id;
                      });
+    const auto make_state = [&shape]() {
+      return renderer::DrawableState{
+          glm::translate(glm::mat4{1.0f},
+                         glm::vec3{static_cast<float>(shape.center_world.x),
+                                   static_cast<float>(shape.center_world.y),
+                                   0.0f}) *
+              glm::scale(glm::mat4{1.0f},
+                         glm::vec3{static_cast<float>(shape.size_world.x),
+                                   static_cast<float>(shape.size_world.y),
+                                   1.0f}),
+          color_to_vec4(shape.color),
+      };
+    };
+
     if (existing_shape != shapes_.end()) {
-      renderer.destroy_drawable(existing_shape->drawable);
+      if (shape_equal(existing_shape->descriptor, shape)) {
+        return;
+      }
       existing_shape->descriptor = shape;
-      existing_shape->drawable = renderer.create_drawable(drawable_desc);
+      renderer.update_drawable(existing_shape->drawable, make_state());
       return;
     }
 
+    const renderer::DrawableDesc drawable_desc{
+        kQuadVertices.data(),
+        kQuadVertices.size(),
+    };
+    auto drawable = renderer.create_drawable(drawable_desc);
+    renderer.update_drawable(drawable, make_state());
     shapes_.push_back(ShapeRecord{
         shape,
-        renderer.create_drawable(drawable_desc),
+        drawable,
     });
   }
 

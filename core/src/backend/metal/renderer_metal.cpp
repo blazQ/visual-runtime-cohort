@@ -27,8 +27,14 @@ struct FrameUniforms {
   glm::mat4 matrix{1.0f};
 };
 
+struct DrawableUniforms {
+  glm::mat4 world_transform{1.0f};
+  glm::vec4 color{1.0f};
+};
+
 struct Drawable {
   MTL::Buffer *vertex_buffer = nullptr;
+  MTL::Buffer *state_buffer = nullptr;
   NS::UInteger vertex_count = 0;
 };
 
@@ -50,6 +56,8 @@ struct RendererBackend {
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
   renderer::DrawableHandle create_drawable(const renderer::DrawableDesc &desc);
+  void update_drawable(renderer::DrawableHandle handle,
+                       const renderer::DrawableState &state);
   void destroy_drawable(renderer::DrawableHandle handle);
   bool begin_frame(float t);
   void draw(renderer::DrawableHandle handle);
@@ -106,6 +114,13 @@ renderer::DrawableHandle
 Renderer::create_drawable(const renderer::DrawableDesc &desc) {
   return backend_ ? backend_->create_drawable(desc)
                   : renderer::DrawableHandle{};
+}
+
+void Renderer::update_drawable(renderer::DrawableHandle handle,
+                               const renderer::DrawableState &state) {
+  if (backend_) {
+    backend_->update_drawable(handle, state);
+  }
 }
 
 void Renderer::destroy_drawable(renderer::DrawableHandle handle) {
@@ -217,8 +232,17 @@ RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
     return {};
   }
 
+  MTL::Buffer *state_buffer = device_->newBuffer(
+      sizeof(DrawableUniforms), MTL::ResourceStorageModeShared);
+  if (!state_buffer) {
+    vertex_buffer->release();
+    std::fprintf(stderr, "[renderer] failed to create drawable state buffer\n");
+    return {};
+  }
+
   const Drawable drawable{
       vertex_buffer,
+      state_buffer,
       static_cast<NS::UInteger>(desc.vertex_count),
   };
   auto empty_slot = std::find_if(
@@ -233,6 +257,7 @@ RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
 
   if (drawables_.size() >= std::numeric_limits<uint32_t>::max()) {
     vertex_buffer->release();
+    state_buffer->release();
     return {};
   }
 
@@ -242,6 +267,20 @@ RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
   };
 }
 
+void RendererBackend::update_drawable(renderer::DrawableHandle handle,
+                                      const renderer::DrawableState &state) {
+  Drawable *drawable = drawable_for(handle);
+  if (!drawable || !drawable->state_buffer) {
+    return;
+  }
+
+  // The renderer owns the upload cache; callers send a full instance snapshot.
+  auto *contents =
+      static_cast<DrawableUniforms *>(drawable->state_buffer->contents());
+  contents->world_transform = state.world_transform;
+  contents->color = state.color;
+}
+
 void RendererBackend::destroy_drawable(renderer::DrawableHandle handle) {
   Drawable *drawable = drawable_for(handle);
   if (!drawable) {
@@ -249,6 +288,9 @@ void RendererBackend::destroy_drawable(renderer::DrawableHandle handle) {
   }
   if (drawable->vertex_buffer) {
     drawable->vertex_buffer->release();
+  }
+  if (drawable->state_buffer) {
+    drawable->state_buffer->release();
   }
   *drawable = {};
 }
@@ -313,6 +355,7 @@ void RendererBackend::draw(renderer::DrawableHandle handle) {
   }
 
   frame_encoder_->setVertexBuffer(drawable->vertex_buffer, 0, 0);
+  frame_encoder_->setVertexBuffer(drawable->state_buffer, 0, 2);
   frame_encoder_->drawPrimitives(MTL::PrimitiveTypeTriangle, NS::UInteger(0),
                                  drawable->vertex_count);
 }
@@ -381,11 +424,6 @@ bool RendererBackend::build_pipeline() {
   position_attr->setOffset(offsetof(renderer::Vertex, position));
   position_attr->setBufferIndex(0);
 
-  auto *color_attr = vertex_desc->attributes()->object(1);
-  color_attr->setFormat(MTL::VertexFormatFloat4);
-  color_attr->setOffset(offsetof(renderer::Vertex, color));
-  color_attr->setBufferIndex(0);
-
   auto *vertex_layout = vertex_desc->layouts()->object(0);
   vertex_layout->setStride(sizeof(renderer::Vertex));
   vertex_layout->setStepFunction(MTL::VertexStepFunctionPerVertex);
@@ -448,6 +486,9 @@ void RendererBackend::shutdown() {
   for (auto &drawable : drawables_) {
     if (drawable.vertex_buffer) {
       drawable.vertex_buffer->release();
+    }
+    if (drawable.state_buffer) {
+      drawable.state_buffer->release();
     }
   }
   drawables_.clear();

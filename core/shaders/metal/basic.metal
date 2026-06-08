@@ -3,7 +3,6 @@ using namespace metal;
 
 struct VertexIn {
     float2 position [[attribute(0)]];
-    float4 color [[attribute(1)]];
 };
 
 struct VertexOut {
@@ -15,11 +14,17 @@ struct FrameUniforms {
     float4x4 matrix;
 };
 
+struct DrawableUniforms {
+    float4x4 world_transform;
+    float4 color;
+};
+
 vertex VertexOut vertex_main(VertexIn in [[stage_in]],
-                             constant FrameUniforms& frame_uniforms [[buffer(1)]]) {
+                             constant FrameUniforms& frame_uniforms [[buffer(1)]],
+                             constant DrawableUniforms& drawable_uniforms [[buffer(2)]]) {
     VertexOut out;
-    out.position = frame_uniforms.matrix * float4(in.position, 0.0, 1.0);
-    out.color = in.color;
+    out.position = frame_uniforms.matrix * drawable_uniforms.world_transform * float4(in.position, 0.0, 1.0);
+    out.color = drawable_uniforms.color;
     return out;
 }
 
