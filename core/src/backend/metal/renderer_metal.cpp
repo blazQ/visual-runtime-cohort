@@ -7,9 +7,12 @@
 #include "Metal/Metal.hpp"
 #include "QuartzCore/QuartzCore.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <glm/mat4x4.hpp>
+#include <limits>
+#include <vector>
 
 namespace {
 
@@ -20,13 +23,13 @@ bool metrics_equal(const VRTSurfaceMetrics &lhs, const VRTSurfaceMetrics &rhs) {
          lhs.screen_height == rhs.screen_height;
 }
 
-struct Vertex {
-  float position[2];
-  float color[3];
-};
-
 struct FrameUniforms {
   glm::mat4 matrix{1.0f};
+};
+
+struct Drawable {
+  MTL::Buffer *vertex_buffer = nullptr;
+  NS::UInteger vertex_count = 0;
 };
 
 void print_error(const char *context, NS::Error *error) {
@@ -46,23 +49,31 @@ struct RendererBackend {
   bool init(VRTSurfaceDescriptor *surface);
   void resize(const VRTSurfaceMetrics *metrics);
   void set_frame_config(const FrameConfig &frame_config);
+  renderer::DrawableHandle create_drawable(const renderer::DrawableDesc &desc);
+  void destroy_drawable(renderer::DrawableHandle handle);
+  bool begin_frame(float t);
+  void draw(renderer::DrawableHandle handle);
+  void end_frame();
   void render_frame(float t);
   void shutdown();
 
 private:
   bool build_pipeline();
-  bool build_geometry();
   bool build_uniforms();
   void update_frame_uniforms(const FrameConfig &frame_config);
+  Drawable *drawable_for(renderer::DrawableHandle handle);
 
   CA::MetalLayer *layer_ = nullptr;
   MTL::Device *device_ = nullptr;
   MTL::CommandQueue *queue_ = nullptr;
   MTL::Library *library_ = nullptr;
   MTL::RenderPipelineState *pipeline_ = nullptr;
-  MTL::Buffer *vertex_buffer_ = nullptr;
   MTL::Buffer *frame_uniform_buffer_ = nullptr;
-  NS::UInteger vertex_count_ = 0;
+  NS::AutoreleasePool *frame_pool_ = nullptr;
+  MTL::CommandBuffer *frame_command_ = nullptr;
+  MTL::RenderCommandEncoder *frame_encoder_ = nullptr;
+  CA::MetalDrawable *frame_drawable_ = nullptr;
+  std::vector<Drawable> drawables_;
   VRTSurfaceMetrics metrics_{};
   FrameConfig frame_config_{};
 };
@@ -88,6 +99,34 @@ void Renderer::resize(const VRTSurfaceMetrics *metrics) {
 void Renderer::set_frame_config(const FrameConfig &frame_config) {
   if (backend_) {
     backend_->set_frame_config(frame_config);
+  }
+}
+
+renderer::DrawableHandle
+Renderer::create_drawable(const renderer::DrawableDesc &desc) {
+  return backend_ ? backend_->create_drawable(desc)
+                  : renderer::DrawableHandle{};
+}
+
+void Renderer::destroy_drawable(renderer::DrawableHandle handle) {
+  if (backend_) {
+    backend_->destroy_drawable(handle);
+  }
+}
+
+bool Renderer::begin_frame(float t) {
+  return backend_ ? backend_->begin_frame(t) : false;
+}
+
+void Renderer::draw(renderer::DrawableHandle handle) {
+  if (backend_) {
+    backend_->draw(handle);
+  }
+}
+
+void Renderer::end_frame() {
+  if (backend_) {
+    backend_->end_frame();
   }
 }
 
@@ -139,7 +178,7 @@ bool RendererBackend::init(VRTSurfaceDescriptor *surface) {
 
   resize(&surface->metrics);
 
-  if (!build_pipeline() || !build_geometry()) {
+  if (!build_pipeline()) {
     shutdown();
     return false;
   }
@@ -163,34 +202,97 @@ void RendererBackend::set_frame_config(const FrameConfig &frame_config) {
   update_frame_uniforms(frame_config_);
 }
 
-void RendererBackend::render_frame(float t) {
-  if (!layer_ || !queue_ || !pipeline_ || !vertex_buffer_ ||
-      !frame_uniform_buffer_)
+renderer::DrawableHandle
+RendererBackend::create_drawable(const renderer::DrawableDesc &desc) {
+  if (!device_ || !desc.vertices || desc.vertex_count == 0) {
+    return {};
+  }
+
+  const size_t byte_count = desc.vertex_count * sizeof(renderer::Vertex);
+  MTL::Buffer *vertex_buffer = device_->newBuffer(
+      desc.vertices, byte_count, MTL::ResourceStorageModeShared);
+  if (!vertex_buffer) {
+    std::fprintf(stderr,
+                 "[renderer] failed to create drawable vertex buffer\n");
+    return {};
+  }
+
+  const Drawable drawable{
+      vertex_buffer,
+      static_cast<NS::UInteger>(desc.vertex_count),
+  };
+  auto empty_slot = std::find_if(
+      drawables_.begin(), drawables_.end(),
+      [](const Drawable &stored) { return stored.vertex_buffer == nullptr; });
+  if (empty_slot != drawables_.end()) {
+    *empty_slot = drawable;
+    return renderer::DrawableHandle{
+        static_cast<uint32_t>((empty_slot - drawables_.begin()) + 1),
+    };
+  }
+
+  if (drawables_.size() >= std::numeric_limits<uint32_t>::max()) {
+    vertex_buffer->release();
+    return {};
+  }
+
+  drawables_.push_back(drawable);
+  return renderer::DrawableHandle{
+      static_cast<uint32_t>(drawables_.size()),
+  };
+}
+
+void RendererBackend::destroy_drawable(renderer::DrawableHandle handle) {
+  Drawable *drawable = drawable_for(handle);
+  if (!drawable) {
     return;
+  }
+  if (drawable->vertex_buffer) {
+    drawable->vertex_buffer->release();
+  }
+  *drawable = {};
+}
+
+bool RendererBackend::begin_frame(float t) {
+  if (!layer_ || !queue_ || !pipeline_ || !frame_uniform_buffer_) {
+    return false;
+  }
 
   (void)t;
 
-  NS::AutoreleasePool *pool = NS::AutoreleasePool::alloc()->init();
+  frame_pool_ = NS::AutoreleasePool::alloc()->init();
 
   CA::MetalDrawable *drawable = layer_->nextDrawable();
   if (!drawable) {
-    pool->release();
-    return;
+    frame_pool_->release();
+    frame_pool_ = nullptr;
+    return false;
   }
+  frame_drawable_ = drawable;
 
   MTL::RenderPassDescriptor *pass =
       MTL::RenderPassDescriptor::renderPassDescriptor();
   auto *color = pass->colorAttachments()->object(0);
-  color->setTexture(drawable->texture());
+  color->setTexture(frame_drawable_->texture());
   color->setLoadAction(MTL::LoadActionClear);
   color->setStoreAction(MTL::StoreActionStore);
   const glm::vec4 &clear_color = frame_config_.clear_color;
   color->setClearColor(MTL::ClearColor(clear_color.r, clear_color.g,
                                        clear_color.b, clear_color.a));
 
-  auto *cmd = queue_->commandBuffer();
-  auto *enc = cmd->renderCommandEncoder(pass);
-  enc->setViewport(MTL::Viewport{
+  frame_command_ = queue_->commandBuffer();
+  if (!frame_command_) {
+    end_frame();
+    return false;
+  }
+
+  frame_encoder_ = frame_command_->renderCommandEncoder(pass);
+  if (!frame_encoder_) {
+    end_frame();
+    return false;
+  }
+
+  frame_encoder_->setViewport(MTL::Viewport{
       0.0,
       0.0,
       static_cast<double>(metrics_.pixel_width),
@@ -198,16 +300,50 @@ void RendererBackend::render_frame(float t) {
       0.0,
       1.0,
   });
-  enc->setRenderPipelineState(pipeline_);
-  enc->setVertexBuffer(vertex_buffer_, 0, 0);
-  enc->setVertexBuffer(frame_uniform_buffer_, 0, 1);
-  enc->drawPrimitives(MTL::PrimitiveTypeTriangle, NS::UInteger(0),
-                      vertex_count_);
-  enc->endEncoding();
-  cmd->presentDrawable(drawable);
-  cmd->commit();
+  frame_encoder_->setRenderPipelineState(pipeline_);
+  frame_encoder_->setVertexBuffer(frame_uniform_buffer_, 0, 1);
+  return true;
+}
 
-  pool->release();
+void RendererBackend::draw(renderer::DrawableHandle handle) {
+  Drawable *drawable = drawable_for(handle);
+  if (!frame_encoder_ || !drawable || !drawable->vertex_buffer ||
+      drawable->vertex_count == 0) {
+    return;
+  }
+
+  frame_encoder_->setVertexBuffer(drawable->vertex_buffer, 0, 0);
+  frame_encoder_->drawPrimitives(MTL::PrimitiveTypeTriangle, NS::UInteger(0),
+                                 drawable->vertex_count);
+}
+
+void RendererBackend::end_frame() {
+  if (!frame_encoder_ || !frame_command_ || !frame_drawable_) {
+    if (frame_pool_) {
+      frame_pool_->release();
+    }
+    frame_pool_ = nullptr;
+    frame_command_ = nullptr;
+    frame_encoder_ = nullptr;
+    frame_drawable_ = nullptr;
+    return;
+  }
+
+  frame_encoder_->endEncoding();
+  frame_command_->presentDrawable(frame_drawable_);
+  frame_command_->commit();
+
+  frame_pool_->release();
+  frame_pool_ = nullptr;
+  frame_command_ = nullptr;
+  frame_encoder_ = nullptr;
+  frame_drawable_ = nullptr;
+}
+
+void RendererBackend::render_frame(float t) {
+  if (begin_frame(t)) {
+    end_frame();
+  }
 }
 
 bool RendererBackend::build_pipeline() {
@@ -242,16 +378,16 @@ bool RendererBackend::build_pipeline() {
   MTL::VertexDescriptor *vertex_desc = MTL::VertexDescriptor::alloc()->init();
   auto *position_attr = vertex_desc->attributes()->object(0);
   position_attr->setFormat(MTL::VertexFormatFloat2);
-  position_attr->setOffset(offsetof(Vertex, position));
+  position_attr->setOffset(offsetof(renderer::Vertex, position));
   position_attr->setBufferIndex(0);
 
   auto *color_attr = vertex_desc->attributes()->object(1);
-  color_attr->setFormat(MTL::VertexFormatFloat3);
-  color_attr->setOffset(offsetof(Vertex, color));
+  color_attr->setFormat(MTL::VertexFormatFloat4);
+  color_attr->setOffset(offsetof(renderer::Vertex, color));
   color_attr->setBufferIndex(0);
 
   auto *vertex_layout = vertex_desc->layouts()->object(0);
-  vertex_layout->setStride(sizeof(Vertex));
+  vertex_layout->setStride(sizeof(renderer::Vertex));
   vertex_layout->setStepFunction(MTL::VertexStepFunctionPerVertex);
   vertex_layout->setStepRate(1);
 
@@ -266,24 +402,6 @@ bool RendererBackend::build_pipeline() {
 
   if (!pipeline_) {
     print_error("failed to create render pipeline", error);
-    return false;
-  }
-
-  return true;
-}
-
-bool RendererBackend::build_geometry() {
-  static constexpr Vertex vertices[] = {
-      {{0.0f, 0.65f}, {1.0f, 0.0f, 0.0f}},
-      {{-0.7f, -0.55f}, {0.0f, 1.0f, 0.0f}},
-      {{0.7f, -0.55f}, {0.0f, 0.0f, 1.0f}},
-  };
-
-  vertex_count_ = sizeof(vertices) / sizeof(vertices[0]);
-  vertex_buffer_ = device_->newBuffer(vertices, sizeof(vertices),
-                                      MTL::ResourceStorageModeShared);
-  if (!vertex_buffer_) {
-    std::fprintf(stderr, "[renderer] failed to create vertex buffer\n");
     return false;
   }
 
@@ -314,15 +432,25 @@ void RendererBackend::update_frame_uniforms(const FrameConfig &frame_config) {
   *contents = uniforms;
 }
 
+Drawable *RendererBackend::drawable_for(renderer::DrawableHandle handle) {
+  if (handle.value == 0 || handle.value > drawables_.size()) {
+    return nullptr;
+  }
+  return &drawables_[handle.value - 1];
+}
+
 void RendererBackend::shutdown() {
+  end_frame();
   if (frame_uniform_buffer_) {
     frame_uniform_buffer_->release();
     frame_uniform_buffer_ = nullptr;
   }
-  if (vertex_buffer_) {
-    vertex_buffer_->release();
-    vertex_buffer_ = nullptr;
+  for (auto &drawable : drawables_) {
+    if (drawable.vertex_buffer) {
+      drawable.vertex_buffer->release();
+    }
   }
+  drawables_.clear();
   if (pipeline_) {
     pipeline_->release();
     pipeline_ = nullptr;
@@ -343,6 +471,5 @@ void RendererBackend::shutdown() {
     layer_->release();
     layer_ = nullptr;
   }
-  vertex_count_ = 0;
   metrics_ = {};
 }

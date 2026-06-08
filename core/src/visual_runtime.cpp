@@ -3,7 +3,9 @@
 #include "visual_runtime/api.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
+#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include <vector>
 
@@ -22,26 +24,80 @@ bool scene_settings_equal(const VRTSceneSettings &lhs,
   return color_equal(lhs.background_color, rhs.background_color);
 }
 
+std::array<renderer::Vertex, 6>
+rectangle_vertices(const VRTShapeDescriptor &shape) {
+  const glm::vec2 center{
+      static_cast<float>(shape.center_world.x),
+      static_cast<float>(shape.center_world.y),
+  };
+  const glm::vec2 half_size{
+      static_cast<float>(shape.size_world.x * 0.5),
+      static_cast<float>(shape.size_world.y * 0.5),
+  };
+  const glm::vec2 min = center - half_size;
+  const glm::vec2 max = center + half_size;
+  const glm::vec4 color = color_to_vec4(shape.color);
+
+  return {{
+      renderer::Vertex{min, color},
+      renderer::Vertex{glm::vec2{max.x, min.y}, color},
+      renderer::Vertex{max, color},
+      renderer::Vertex{min, color},
+      renderer::Vertex{max, color},
+      renderer::Vertex{glm::vec2{min.x, max.y}, color},
+  }};
+}
+
 class ShapeStore {
 public:
-  void upsert(const VRTShapeDescriptor &shape) {
+  void upsert(const VRTShapeDescriptor &shape, Renderer &renderer) {
     if (shape.id == 0) {
       return;
     }
+    auto vertices = rectangle_vertices(shape);
+    const renderer::DrawableDesc drawable_desc{
+        vertices.data(),
+        vertices.size(),
+    };
+
     auto existing_shape =
         std::find_if(shapes_.begin(), shapes_.end(),
-                     [id = shape.id](const VRTShapeDescriptor &stored_shape) {
-                       return stored_shape.id == id;
+                     [id = shape.id](const ShapeRecord &record) {
+                       return record.descriptor.id == id;
                      });
     if (existing_shape != shapes_.end()) {
-      *existing_shape = shape;
+      renderer.destroy_drawable(existing_shape->drawable);
+      existing_shape->descriptor = shape;
+      existing_shape->drawable = renderer.create_drawable(drawable_desc);
       return;
     }
-    shapes_.push_back(shape);
+
+    shapes_.push_back(ShapeRecord{
+        shape,
+        renderer.create_drawable(drawable_desc),
+    });
+  }
+
+  void draw(Renderer &renderer) const {
+    for (const auto &shape : shapes_) {
+      renderer.draw(shape.drawable);
+    }
+  }
+
+  void destroy_drawables(Renderer &renderer) {
+    for (const auto &shape : shapes_) {
+      renderer.destroy_drawable(shape.drawable);
+    }
+    shapes_.clear();
   }
 
 private:
-  std::vector<VRTShapeDescriptor> shapes_;
+  struct ShapeRecord {
+    VRTShapeDescriptor descriptor{};
+    renderer::DrawableHandle drawable{};
+  };
+
+  std::vector<ShapeRecord> shapes_;
 };
 
 // Private C++ owner for one visual runtime instance. Think of
@@ -59,7 +115,10 @@ public:
     std::fflush(stdout);
   }
 
-  ~VisualRuntime() { renderer_.shutdown(); }
+  ~VisualRuntime() {
+    shapes_.destroy_drawables(renderer_);
+    renderer_.shutdown();
+  }
 
   VisualRuntime(const VisualRuntime &) = delete;
   VisualRuntime &operator=(const VisualRuntime &) = delete;
@@ -86,12 +145,16 @@ public:
     sync_frame_config();
   }
 
-  void upsert_shape(const VRTShapeDescriptor &shape) { shapes_.upsert(shape); }
+  void upsert_shape(const VRTShapeDescriptor &shape) {
+    shapes_.upsert(shape, renderer_);
+  }
 
   void update(float dt) {
-    frame_count_ += 1;
     elapsed_time_ += dt;
-    renderer_.render_frame(elapsed_time_);
+    if (renderer_.begin_frame(elapsed_time_)) {
+      shapes_.draw(renderer_);
+      renderer_.end_frame();
+    }
   }
 
 private:
@@ -107,7 +170,6 @@ private:
   ShapeStore shapes_;
   ViewState view_state_;
   Renderer renderer_;
-  uint64_t frame_count_ = 0;
   float elapsed_time_ = 0.0f;
 };
 

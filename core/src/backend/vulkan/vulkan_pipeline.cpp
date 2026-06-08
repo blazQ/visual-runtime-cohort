@@ -55,7 +55,7 @@ bool VulkanPipeline::create(const VulkanContext &context,
   vertex_attributes[0].offset = config.position_offset;
   vertex_attributes[1].location = 1;
   vertex_attributes[1].binding = 0;
-  vertex_attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+  vertex_attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
   vertex_attributes[1].offset = config.color_offset;
 
   VkPipelineVertexInputStateCreateInfo vertex_input{};

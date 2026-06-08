@@ -3,12 +3,12 @@ using namespace metal;
 
 struct VertexIn {
     float2 position [[attribute(0)]];
-    float3 color [[attribute(1)]];
+    float4 color [[attribute(1)]];
 };
 
 struct VertexOut {
     float4 position [[position]];
-    float3 color;
+    float4 color;
 };
 
 struct FrameUniforms {
@@ -24,5 +24,5 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
 }
 
 fragment float4 fragment_main(VertexOut in [[stage_in]]) {
-    return float4(in.color, 1.0);
+    return in.color;
 }

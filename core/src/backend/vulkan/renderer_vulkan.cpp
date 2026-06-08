@@ -23,11 +23,6 @@ using visual_runtime::vulkan::VulkanFrameResources;
 using visual_runtime::vulkan::VulkanPipeline;
 using visual_runtime::vulkan::VulkanPipelineConfig;
 
-struct Vertex {
-  float position[2];
-  float color[3];
-};
-
 struct FrameUniforms {
   glm::mat4 matrix{1.0f};
 };
@@ -105,6 +100,22 @@ void Renderer::set_frame_config(const FrameConfig &frame_config) {
     backend_->set_frame_config(frame_config);
   }
 }
+
+renderer::DrawableHandle
+Renderer::create_drawable(const renderer::DrawableDesc &) {
+  return {};
+}
+
+void Renderer::destroy_drawable(renderer::DrawableHandle) {}
+
+bool Renderer::begin_frame(float t) {
+  render_frame(t);
+  return false;
+}
+
+void Renderer::draw(renderer::DrawableHandle) {}
+
+void Renderer::end_frame() {}
 
 void Renderer::render_frame(float t) {
   if (backend_) {
@@ -329,10 +340,10 @@ void RendererBackend::recreate_frame_resources() {
 }
 
 bool RendererBackend::build_geometry() {
-  static constexpr Vertex vertices[] = {
-      {{0.0f, 0.65f}, {1.0f, 0.0f, 0.0f}},
-      {{-0.7f, -0.55f}, {0.0f, 1.0f, 0.0f}},
-      {{0.7f, -0.55f}, {0.0f, 0.0f, 1.0f}},
+  const renderer::Vertex vertices[] = {
+      {glm::vec2{0.0f, 0.65f}, glm::vec4{1.0f, 0.0f, 0.0f, 1.0f}},
+      {glm::vec2{-0.7f, -0.55f}, glm::vec4{0.0f, 1.0f, 0.0f, 1.0f}},
+      {glm::vec2{0.7f, -0.55f}, glm::vec4{0.0f, 0.0f, 1.0f, 1.0f}},
   };
 
   const VkDeviceSize buffer_size = sizeof(vertices);
@@ -436,9 +447,9 @@ bool RendererBackend::build_pipeline() {
   config.color_format = frame_resources_.format();
   config.vertex_shader_path = VRT_VULKAN_VERTEX_SPV_PATH;
   config.fragment_shader_path = VRT_VULKAN_FRAGMENT_SPV_PATH;
-  config.vertex_stride = sizeof(Vertex);
-  config.position_offset = offsetof(Vertex, position);
-  config.color_offset = offsetof(Vertex, color);
+  config.vertex_stride = sizeof(renderer::Vertex);
+  config.position_offset = offsetof(renderer::Vertex, position);
+  config.color_offset = offsetof(renderer::Vertex, color);
 
   return pipeline_.create(context_, config);
 }
