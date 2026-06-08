@@ -19,7 +19,7 @@ struct ShapeToolbar: View {
                         .rectangle(
                             RectangleShape(
                                 center: .zero,
-                                size: CGSize(width: 120, height: 80),
+                                size: CGSize(width: 2, height: 1),
                                 color: .orange
                             )
                         )

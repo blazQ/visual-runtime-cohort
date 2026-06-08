@@ -63,6 +63,14 @@ void VisualRuntimeHost::changeView(const VRTViewChange &change) {
   module_->changeView(change);
 }
 
+bool VisualRuntimeHost::screenToWorld(const VRTScreenPoint &screen,
+                                      VRTWorldPoint &world) {
+  if (!module_)
+    return false;
+
+  return module_->screenToWorld(screen, world);
+}
+
 void VisualRuntimeHost::upsertShape(const VRTShapeDescriptor &shape) {
   if (!module_)
     return;

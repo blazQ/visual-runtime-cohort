@@ -22,9 +22,12 @@ final class MetalNSView: NSView {
 
     var drawableSizeDidChange: ((VRTSurfaceMetrics) -> Void)?
     var scrollDidChange: ((Double, CGPoint) -> Void)?
+    var pointerDidMove: ((CGPoint) -> Void)?
+    var pointerDidClick: ((CGPoint) -> Void)?
     private var lastDrawableScale: CGFloat = 0
     private var lastDrawableSize: CGSize = .zero
     private var lastScreenSize: CGSize = .zero
+    private var pointerTrackingArea: NSTrackingArea?
 
     var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
@@ -36,6 +39,23 @@ final class MetalNSView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         updateDrawableSize(frame.size)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let pointerTrackingArea {
+            removeTrackingArea(pointerTrackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        pointerTrackingArea = trackingArea
     }
 
     func updateDrawableSize(_ size: NSSize) {
@@ -54,9 +74,24 @@ final class MetalNSView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        scrollDidChange?(event.scrollingDeltaY, screenPoint(for: event))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        pointerDidMove?(screenPoint(for: event))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let pointerDidClick else {
+            super.mouseDown(with: event)
+            return
+        }
+        pointerDidClick(screenPoint(for: event))
+    }
+
+    private func screenPoint(for event: NSEvent) -> CGPoint {
         let localPoint = convert(event.locationInWindow, from: nil)
-        let screenPoint = CGPoint(x: localPoint.x, y: bounds.height - localPoint.y)
-        scrollDidChange?(event.scrollingDeltaY, screenPoint)
+        return CGPoint(x: localPoint.x, y: bounds.height - localPoint.y)
     }
 }
 
@@ -65,6 +100,8 @@ final class MetalNSView: NSView {
 struct MetalView: NSViewRepresentable {
     let session: VisualRuntimeSession
     let sceneSettings: VisualRuntimeSession.SceneSettings
+    var onPointerMove: ((CGPoint) -> Void)? = nil
+    var onPointerClick: ((CGPoint) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
@@ -76,6 +113,8 @@ struct MetalView: NSViewRepresentable {
 
     func updateNSView(_ view: MetalNSView, context: Context) {
         context.coordinator.applySceneSettings(sceneSettings)
+        view.pointerDidMove = onPointerMove
+        view.pointerDidClick = onPointerClick
     }
 
     // MARK: Coordinator - owns the display link and drives visual runtime ticks

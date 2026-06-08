@@ -6,10 +6,17 @@ struct WorkspaceView: View {
     let sceneSettings: VisualRuntimeSession.SceneSettings
     @Binding var backgroundColor: Color
     @State private var viewportSize: CGSize = .zero
+    @State private var activeStagedShapeID: SceneShape.ID?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            CanvasView(session: session, sceneSettings: sceneSettings)
+            CanvasView(
+                session: session,
+                sceneSettings: sceneSettings,
+                isPlacing: activeStagedShapeID != nil,
+                onPointerMove: handlePointerMove,
+                onPointerClick: handlePointerClick
+            )
 
             KeyHandlingView(session: session)
                 .frame(width: 0, height: 0)
@@ -45,10 +52,31 @@ struct WorkspaceView: View {
     }
 
     private func addCanvasItem(_ item: CanvasItem) {
+        guard activeStagedShapeID == nil else { return }
+
         switch item {
         case let .rectangle(rectangle):
-            session.upsertShape(sceneModel.addRectangle(rectangle))
+            let shape = sceneModel.stageRectangle(rectangle)
+            activeStagedShapeID = shape.id
+            session.upsertShape(shape)
         }
+    }
+
+    private func handlePointerMove(_ screenPoint: CGPoint) {
+        guard let id = activeStagedShapeID,
+              let worldPoint = session.screenToWorld(screenPoint),
+              let shape = sceneModel.updateStagedShape(id: id, center: worldPoint)
+        else { return }
+
+        session.upsertShape(shape)
+    }
+
+    private func handlePointerClick(_ screenPoint: CGPoint) {
+        handlePointerMove(screenPoint)
+        guard let id = activeStagedShapeID else { return }
+
+        _ = sceneModel.commitStagedShape(id: id)
+        activeStagedShapeID = nil
     }
 }
 

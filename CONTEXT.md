@@ -56,9 +56,21 @@ _Avoid_: renderer API, RHI, backend API, premature mesh/material/object API
 A product-shaped request to create or replace scene shape content with a caller-chosen identity. Shape upserts describe the intended visual content in product terms and do not expose how the visual runtime stores or draws that content.
 _Avoid_: draw command, renderer object, GPU resource update
 
+**Staged Shape**:
+A scene shape owned by the scene model and visible in the visual runtime, but not yet committed into the main scene collection. Staging describes scene lifecycle rather than a special rendering style.
+_Avoid_: ghost object, temporary renderer object, preview-only drawable
+
+**Committed Shape**:
+A scene shape that is part of the main scene collection rather than the staging collection. Committed shape status does not imply a different visual runtime representation from staged shape status.
+_Avoid_: live renderer object, permanent GPU object
+
 **World Unit**:
 A scene-space unit used to describe retained visual content independently from the current surface size, pixel density, or camera/view. World units are not screen units, physical pixels, or normalized device coordinates.
 _Avoid_: screen point, framebuffer pixel, clip-space coordinate
+
+**World Point**:
+A point in scene-space world units, suitable for placing scene content independently from the current viewport. A world point may be derived from a surface-local screen point by the visual runtime because the visual runtime owns retained view state.
+_Avoid_: mouse point, screen coordinate, backend coordinate
 
 **World-Space Rectangle**:
 An axis-aligned rectangle in world units, described by its center position and size. It belongs to the scene rather than to the current viewport.

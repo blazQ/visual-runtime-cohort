@@ -39,6 +39,16 @@ public final class VisualRuntimeSession {
     host.changeView(change.rawValue)
   }
 
+  func screenToWorld(_ screenPoint: CGPoint) -> CGPoint? {
+    var world = VRTWorldPoint()
+    let ok = host.screenToWorld(
+      VRTScreenPoint(x_screen: screenPoint.x, y_screen: screenPoint.y),
+      &world
+    )
+    guard ok else { return nil }
+    return CGPoint(x: world.x_world, y: world.y_world)
+  }
+
   func upsertShape(_ shape: ShapeDescriptor) {
     host.upsertShape(shape.rawValue)
   }
