@@ -30,7 +30,7 @@ else()
     )
 
     if(NOT VRT_VULKAN_INCLUDE_DIR OR NOT VRT_VULKAN_LIBRARY)
-        message(FATAL_ERROR "VISUAL_RUNTIME_BACKEND=Vulkan requires Vulkan headers and loader. Install a Vulkan SDK, or on macOS run: brew install vulkan-headers vulkan-loader molten-vk")
+        message(FATAL_ERROR "VISUAL_RUNTIME_BACKEND=Vulkan requires Vulkan SDK headers and loader. Install a Vulkan SDK and make it visible to CMake, for example by sourcing the SDK setup-env.sh script.")
     endif()
 
     target_include_directories(visual_runtime PRIVATE "${VRT_VULKAN_INCLUDE_DIR}")
@@ -85,26 +85,6 @@ target_compile_definitions(visual_runtime PRIVATE
     VRT_VULKAN_VERTEX_SPV_PATH="${VRT_VULKAN_VERTEX_SPV}"
     VRT_VULKAN_FRAGMENT_SPV_PATH="${VRT_VULKAN_FRAGMENT_SPV}"
 )
-
-if(APPLE)
-    set(MOLTENVK_ROOT "" CACHE PATH "Optional MoltenVK install root for macOS Vulkan smoke tests")
-    find_file(VRT_MOLTENVK_ICD_JSON
-        NAMES MoltenVK_icd.json
-        HINTS
-            "${MOLTENVK_ROOT}/etc/vulkan/icd.d"
-            "$ENV{MOLTENVK_ROOT}/etc/vulkan/icd.d"
-            /opt/homebrew/opt/molten-vk/etc/vulkan/icd.d
-            /usr/local/opt/molten-vk/etc/vulkan/icd.d
-    )
-
-    if(NOT VRT_MOLTENVK_ICD_JSON)
-        message(FATAL_ERROR "VISUAL_RUNTIME_BACKEND=Vulkan on macOS requires MoltenVK for local smoke testing. Install it with: brew install molten-vk, or set MOLTENVK_ROOT.")
-    endif()
-
-    target_compile_definitions(visual_runtime PRIVATE
-        VRT_MOLTENVK_ICD_JSON="${VRT_MOLTENVK_ICD_JSON}"
-    )
-endif()
 
 target_compile_definitions(visual_runtime PRIVATE
     VRT_BACKEND_VULKAN=1
