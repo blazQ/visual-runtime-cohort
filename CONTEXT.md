@@ -76,8 +76,8 @@ _Avoid_: mouse point, screen coordinate, backend coordinate
 An axis-aligned rectangle in world units, described by its center position and size. It belongs to the scene rather than to the current viewport.
 _Avoid_: screen-space rectangle, viewport overlay, pixel bounds
 
-**World Transform**:
-A shape-owned transform that maps the shape's local geometry into world space. For simple shapes, the world transform may carry placement and size while the local geometry stays canonical.
+**Model Transform**:
+A shape-owned transform that maps the shape's local geometry into world space. For simple shapes, the model transform may carry placement and size while the local geometry stays canonical.
 _Avoid_: local transform, baked vertex position, viewport transform
 
 **Canonical Rectangle Geometry**:
