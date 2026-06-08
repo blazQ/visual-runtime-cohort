@@ -30,7 +30,7 @@ struct DrawableDesc {
 };
 
 struct DrawableState {
-  glm::mat4 world_transform{1.0f};
+  glm::mat4 model_transform{1.0f};
   glm::vec4 color{1.0f};
 };
 

@@ -15,7 +15,7 @@ struct FrameUniforms {
 };
 
 struct DrawableUniforms {
-    float4x4 world_transform;
+    float4x4 model_transform;
     float4 color;
 };
 
@@ -23,7 +23,7 @@ vertex VertexOut vertex_main(VertexIn in [[stage_in]],
                              constant FrameUniforms& frame_uniforms [[buffer(1)]],
                              constant DrawableUniforms& drawable_uniforms [[buffer(2)]]) {
     VertexOut out;
-    out.position = frame_uniforms.matrix * drawable_uniforms.world_transform * float4(in.position, 0.0, 1.0);
+    out.position = frame_uniforms.matrix * drawable_uniforms.model_transform * float4(in.position, 0.0, 1.0);
     out.color = drawable_uniforms.color;
     return out;
 }

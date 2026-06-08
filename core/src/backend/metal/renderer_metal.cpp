@@ -28,7 +28,7 @@ struct FrameUniforms {
 };
 
 struct DrawableUniforms {
-  glm::mat4 world_transform{1.0f};
+  glm::mat4 model_transform{1.0f};
   glm::vec4 color{1.0f};
 };
 
@@ -277,7 +277,7 @@ void RendererBackend::update_drawable(renderer::DrawableHandle handle,
   // The renderer owns the upload cache; callers send a full instance snapshot.
   auto *contents =
       static_cast<DrawableUniforms *>(drawable->state_buffer->contents());
-  contents->world_transform = state.world_transform;
+  contents->model_transform = state.model_transform;
   contents->color = state.color;
 }
 
