@@ -40,6 +40,10 @@ _Avoid_: portable app shell, GLFW renderer, UI parity harness
 The reloadable dylib that owns visual behavior behind the visual runtime API boundary. Use this as the user-facing top-level concept instead of the generic term runtime when discussing rendering behavior.
 _Avoid_: renderer app, host, generic runtime
 
+**Scene**:
+The visual runtime's retained internal model of visual content derived from Visual Runtime API calls. At the current scale, the visual runtime may effectively be the scene; separate scene objects or renderer-preparation layers should only appear when they make the boundary clearer.
+_Avoid_: render world, product scene, backend state
+
 **Visual Runtime API Boundary**:
 The narrow C-compatible contract shared by the harness and the visual runtime.
 _Avoid_: renderer API, Metal API
@@ -55,6 +59,22 @@ _Avoid_: renderer API, RHI, backend API, premature mesh/material/object API
 **Shape Upsert**:
 A product-shaped request to create or replace scene shape content with a caller-chosen identity. Shape upserts describe the intended visual content in product terms and do not expose how the visual runtime stores or draws that content.
 _Avoid_: draw command, renderer object, GPU resource update
+
+**Shape Store**:
+The visual runtime's retained collection of product-shaped scene shape data, keyed by product-owned identity. A shape store describes what shapes exist in the scene; renderer handles, draw calls, backend resources, and sync caches belong to renderer-facing runtime state rather than to the shape store. A shape store should only be introduced when the visual runtime needs source shape data separately from drawable state.
+_Avoid_: drawable store, renderer facade, GPU resource cache
+
+**Shape Drawable**:
+Renderer-facing retained state for a shape that is keyed by product-owned shape identity. A shape drawable may retain the latest shape descriptor needed to update drawable state, but it is not a separate source-of-truth shape store.
+_Avoid_: public shape object, shape store, scene entity
+
+**Shape Descriptor**:
+The product-shaped value that describes one retained shape at the visual runtime boundary. A shape descriptor may be retained directly while the internal scene concept matches the boundary value, but ABI-only fields such as reserved space are not scene meaning.
+_Avoid_: renderer descriptor, GPU descriptor, backend shape
+
+**Internal Shape**:
+The visual runtime's C++ scene representation of a retained shape after crossing the C-compatible API boundary. Internal shapes use the visual runtime's C++ value vocabulary, such as GLM math types, rather than preserving ABI carrier types when no ABI compatibility is needed.
+_Avoid_: ABI shape copy, renderer descriptor, backend object
 
 **Staged Shape**:
 A scene shape owned by the scene model and visible in the visual runtime, but not yet committed into the main scene collection. Staging describes scene lifecycle rather than a special rendering style.
@@ -119,10 +139,6 @@ _Avoid_: backend default, host-only default
 **Visual Runtime Feature Parity**:
 The expectation that a participant can work on the same visual-runtime behavior across supported harnesses, even when each harness has different native UI affordances.
 _Avoid_: harness UI parity, identical app shell
-
-**Render World**:
-The visual runtime's internal retained visual state derived from Visual Runtime API calls and consumed by renderer backends each frame. The render world is not exposed to the harness as a data structure and should not force product-facing concepts before product features require them.
-_Avoid_: product scene, harness world, backend state
 
 **Drawable Instance**:
 Renderer-owned state for one retained visual item. A drawable instance may cache geometry, transform, color, or backend upload state, but it should not prevent the visual runtime from sharing canonical geometry or other reusable resources as the renderer model matures.
