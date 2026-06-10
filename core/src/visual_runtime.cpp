@@ -22,7 +22,7 @@ bool color_equal(const VRTColorRGBA &lhs, const VRTColorRGBA &rhs) {
   return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
 }
 
-bool vec2_equal(const glm::vec2 &lhs, const glm::vec2 &rhs) {
+bool vec2_equal(const glm::dvec2 &lhs, const glm::dvec2 &rhs) {
   return lhs.x == rhs.x && lhs.y == rhs.y;
 }
 
@@ -38,8 +38,8 @@ bool scene_settings_equal(const VRTSceneSettings &lhs,
 // These are scene concepts kept local to VisualRuntime for now. When the
 // runtime grows a dedicated Scene object, these structs should move with it.
 struct ShapeBounds {
-  glm::vec2 center_world{};
-  glm::vec2 size_world{};
+  glm::dvec2 center_world{};
+  glm::dvec2 size_world{};
 };
 
 struct Shape {
@@ -59,10 +59,8 @@ Shape shape_from_descriptor(const VRTShapeDescriptor &descriptor) {
       descriptor.id,
       descriptor.kind,
       ShapeBounds{
-          glm::vec2{static_cast<float>(descriptor.center_world.x),
-                    static_cast<float>(descriptor.center_world.y)},
-          glm::vec2{static_cast<float>(descriptor.size_world.x),
-                    static_cast<float>(descriptor.size_world.y)},
+          glm::dvec2{descriptor.center_world.x, descriptor.center_world.y},
+          glm::dvec2{descriptor.size_world.x, descriptor.size_world.y},
       },
       color_to_vec4(descriptor.color),
   };
@@ -94,11 +92,13 @@ constexpr std::array<Renderer::Vertex, 6> kQuadVertices{{
 Renderer::DrawableState drawable_state_for(const Shape &shape) {
   return Renderer::DrawableState{
       glm::translate(glm::mat4{1.0f},
-                     glm::vec3{shape.bounds.center_world.x,
-                               shape.bounds.center_world.y, 0.0f}) *
+                     glm::vec3{static_cast<float>(shape.bounds.center_world.x),
+                               static_cast<float>(shape.bounds.center_world.y),
+                               0.0f}) *
           glm::scale(glm::mat4{1.0f},
-                     glm::vec3{shape.bounds.size_world.x,
-                               shape.bounds.size_world.y, 1.0f}),
+                     glm::vec3{static_cast<float>(shape.bounds.size_world.x),
+                               static_cast<float>(shape.bounds.size_world.y),
+                               1.0f}),
       shape.color,
   };
 }
