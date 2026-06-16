@@ -20,7 +20,14 @@ final class MetalNSView: NSView {
 
     override var wantsUpdateLayer: Bool { true }
 
-    var drawableSizeDidChange: ((CGSize) -> Void)?
+    var drawableSizeDidChange: ((VRTSurfaceMetrics) -> Void)?
+    var scrollDidChange: ((Double, CGPoint) -> Void)?
+    var pointerDidMove: ((CGPoint) -> Void)?
+    var pointerDidClick: ((CGPoint) -> Void)?
+    private var lastDrawableScale: CGFloat = 0
+    private var lastDrawableSize: CGSize = .zero
+    private var lastScreenSize: CGSize = .zero
+    private var pointerTrackingArea: NSTrackingArea?
 
     var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
@@ -34,12 +41,57 @@ final class MetalNSView: NSView {
         updateDrawableSize(frame.size)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let pointerTrackingArea {
+            removeTrackingArea(pointerTrackingArea)
+        }
+
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        pointerTrackingArea = trackingArea
+    }
+
     func updateDrawableSize(_ size: NSSize) {
         let scale = window?.backingScaleFactor ?? 1.0
-        metalLayer.contentsScale = scale
         let drawableSize = CGSize(width: size.width * scale, height: size.height * scale)
+        guard scale != lastDrawableScale ||
+              drawableSize != lastDrawableSize ||
+              size != lastScreenSize else { return }
+
+        lastDrawableScale = scale
+        lastDrawableSize = drawableSize
+        lastScreenSize = size
+        metalLayer.contentsScale = scale
         metalLayer.drawableSize = drawableSize
-        drawableSizeDidChange?(drawableSize)
+        drawableSizeDidChange?(metalLayer.visualRuntimeSurfaceMetrics)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        scrollDidChange?(event.scrollingDeltaY, screenPoint(for: event))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        pointerDidMove?(screenPoint(for: event))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let pointerDidClick else {
+            super.mouseDown(with: event)
+            return
+        }
+        pointerDidClick(screenPoint(for: event))
+    }
+
+    private func screenPoint(for event: NSEvent) -> CGPoint {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: localPoint.x, y: bounds.height - localPoint.y)
     }
 }
 
@@ -47,6 +99,9 @@ final class MetalNSView: NSView {
 
 struct MetalView: NSViewRepresentable {
     let session: VisualRuntimeSession
+    let sceneSettings: VisualRuntimeSession.SceneSettings
+    var onPointerMove: ((CGPoint) -> Void)? = nil
+    var onPointerClick: ((CGPoint) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
@@ -56,21 +111,35 @@ struct MetalView: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: MetalNSView, context: Context) {}
+    func updateNSView(_ view: MetalNSView, context: Context) {
+        context.coordinator.applySceneSettings(sceneSettings)
+        view.pointerDidMove = onPointerMove
+        view.pointerDidClick = onPointerClick
+    }
 
     // MARK: Coordinator - owns the display link and drives visual runtime ticks
 
     final class Coordinator: NSObject {
         let session: VisualRuntimeSession
         private var displayLink: CADisplayLink?
+        private var appliedSceneSettings: VisualRuntimeSession.SceneSettings?
         private var lastTime: Double = 0
+        private var pendingScrollZoom: Double = 0
+        private var scrollZoomAnchor: CGPoint = .zero
+
+        private let scrollZoomSpeed = 0.018
+        private let scrollZoomTimeConstant = 0.04
+        private let minimumPendingScrollZoom = 0.00001
 
         init(session: VisualRuntimeSession) { self.session = session }
 
         func start(view: MetalNSView) {
             view.updateDrawableSize(view.frame.size)
-            view.drawableSizeDidChange = { [weak session] size in
-                session?.resize(width: UInt32(size.width), height: UInt32(size.height))
+            view.drawableSizeDidChange = { [weak session] metrics in
+                session?.resize(metrics)
+            }
+            view.scrollDidChange = { [weak self] deltaY, anchor in
+                self?.enqueueScrollZoom(deltaY: deltaY, anchor: anchor)
             }
             session.attach(view.metalLayer)
 
@@ -79,11 +148,33 @@ struct MetalView: NSViewRepresentable {
             self.displayLink = displayLink
         }
 
+        func applySceneSettings(_ settings: VisualRuntimeSession.SceneSettings) {
+            guard settings != appliedSceneSettings else { return }
+            appliedSceneSettings = settings
+            session.setSceneSettings(settings)
+        }
+
+        private func enqueueScrollZoom(deltaY: Double, anchor: CGPoint) {
+            guard deltaY.isFinite else { return }
+            pendingScrollZoom += deltaY * scrollZoomSpeed
+            scrollZoomAnchor = anchor
+        }
+
         @objc private func displayLinkFired(_ displayLink: CADisplayLink) {
             let now = displayLink.timestamp
-            let dt  = lastTime == 0 ? 0.0 : Float(now - lastTime)
+            let dt = lastTime == 0 ? 0.0 : now - lastTime
             lastTime = now
-            session.tick(dt)
+
+            if dt > 0, Swift.abs(pendingScrollZoom) > minimumPendingScrollZoom {
+                let blend = 1.0 - exp(-dt / scrollZoomTimeConstant)
+                let zoomStep = pendingScrollZoom * blend
+                pendingScrollZoom -= zoomStep
+                session.zoomViewBy(logScale: zoomStep, anchor: scrollZoomAnchor)
+            } else if Swift.abs(pendingScrollZoom) <= minimumPendingScrollZoom {
+                pendingScrollZoom = 0
+            }
+
+            session.tick(Float(dt))
         }
 
         deinit { displayLink?.invalidate() }

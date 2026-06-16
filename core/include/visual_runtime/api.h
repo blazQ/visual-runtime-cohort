@@ -1,42 +1,30 @@
 #pragma once
+#include "visual_runtime/types.h"
 #include <cstdint>
 
-struct VisualRuntimeState {
-  uint64_t frame_count;
-  float elapsed_time;
+// Opaque per-instance runtime handle owned by the visual runtime API.
+// Hosts allocate this small carrier, but they must not inspect runtime.
+struct VRTState {
+  void *runtime;
 };
 
-enum class SurfaceKind : uint32_t {
-  None = 0,
-  MacOSMetalLayer = 1,
-  LinuxXcbWindow = 2,
-  LinuxWaylandSurface = 3,
-};
+constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 5;
 
-// Describes the native rendering surface passed to the visual runtime on init.
-// Handle fields are interpreted according to kind; null/zero for headless
-// hosts.
-struct SurfaceDescriptor {
-  SurfaceKind kind;
-  void *display_handle;
-  uintptr_t surface_handle;
-  uint32_t width;
-  uint32_t height;
-};
-
-constexpr uint32_t VISUAL_RUNTIME_API_VERSION = 4;
-
-struct VisualRuntimeAPI {
+struct VRTAPI {
   uint32_t abi_version;
   uint32_t struct_size;
   const char *backend_name;
 
-  void (*init)(VisualRuntimeState *, SurfaceDescriptor *);
-  void (*resize)(VisualRuntimeState *, uint32_t, uint32_t);
-  void (*update)(VisualRuntimeState *, float);
-  void (*shutdown)(VisualRuntimeState *);
+  void (*init)(VRTState *, VRTSurfaceDescriptor *);
+  void (*resize)(VRTState *, const VRTSurfaceMetrics *);
+  void (*set_scene_settings)(VRTState *, const VRTSceneSettings *);
+  void (*change_view)(VRTState *, const VRTViewChange *);
+  bool (*screen_to_world)(VRTState *, const VRTScreenPoint *, VRTWorldPoint *);
+  void (*upsert_shape)(VRTState *, const VRTShapeDescriptor *);
+  void (*update)(VRTState *, float);
+  void (*shutdown)(VRTState *);
 };
 
 extern "C" {
-const VisualRuntimeAPI *visual_runtime_get_api();
+const VRTAPI *visual_runtime_get_api();
 }

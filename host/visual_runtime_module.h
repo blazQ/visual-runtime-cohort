@@ -3,7 +3,6 @@
 #include "dynamic_library.h"
 #include "visual_runtime_api.h"
 
-#include <cstdint>
 #include <utility>
 
 struct VisualRuntimeModule {
@@ -23,17 +22,38 @@ struct VisualRuntimeModule {
     return VisualRuntimeModule(DynamicLibrary::open(lib_path));
   }
 
-  void attachSurface(SurfaceDescriptor surface) {
+  void attachSurface(VRTSurfaceDescriptor surface) {
     surface_ = surface;
     has_surface_ = true;
     init();
   }
 
-  void resize(uint32_t width, uint32_t height) {
-    surface_.width = width;
-    surface_.height = height;
+  void resize(VRTSurfaceMetrics metrics) {
+    surface_.metrics = metrics;
     if (initialized_ && api_.resize)
-      api_.resize(&state_, width, height);
+      api_.resize(&state_, &surface_.metrics);
+  }
+
+  void setSceneSettings(const VRTSceneSettings &settings) const {
+    if (initialized_ && api_.set_scene_settings)
+      api_.set_scene_settings(&state_, &settings);
+  }
+
+  void changeView(const VRTViewChange &change) const {
+    if (initialized_ && api_.change_view)
+      api_.change_view(&state_, &change);
+  }
+
+  bool screenToWorld(const VRTScreenPoint &screen,
+                     VRTWorldPoint &world) const {
+    if (!initialized_ || !api_.screen_to_world)
+      return false;
+    return api_.screen_to_world(&state_, &screen, &world);
+  }
+
+  void upsertShape(const VRTShapeDescriptor &shape) const {
+    if (initialized_ && api_.upsert_shape)
+      api_.upsert_shape(&state_, &shape);
   }
 
   bool reloadIfChanged() {
@@ -53,8 +73,9 @@ struct VisualRuntimeModule {
   }
 
   void tick(float dt) const {
-    if (api_.update)
-      api_.update(&state_, dt);
+    if (!initialized_ || !api_.update)
+      return;
+    api_.update(&state_, dt);
   }
 
   void shutdown() const {
@@ -64,8 +85,6 @@ struct VisualRuntimeModule {
       api_.shutdown(&state_);
     initialized_ = false;
   }
-
-  uint64_t frameCount() const { return state_.frame_count; }
 
   const char *backendName() const {
     return api_.backend_name ? api_.backend_name : "Unknown";
@@ -90,7 +109,7 @@ private:
     if (!get_api)
       return;
 
-    const VisualRuntimeAPI *loaded_api = get_api();
+    const VRTAPI *loaded_api = get_api();
     if (!loaded_api) {
       std::fprintf(
           stderr,
@@ -112,10 +131,10 @@ private:
   }
 
   DynamicLibrary lib_;
-  VisualRuntimeAPI api_;
+  VRTAPI api_;
   bool api_bound_ = false;
-  mutable VisualRuntimeState state_{};
-  mutable SurfaceDescriptor surface_{};
+  mutable VRTState state_{};
+  mutable VRTSurfaceDescriptor surface_{};
   bool has_surface_ = false;
   mutable bool initialized_ = false;
 };

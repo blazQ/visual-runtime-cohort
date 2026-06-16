@@ -1,37 +1,240 @@
+import CoreGraphics
+import Darwin
 import QuartzCore
+import SwiftUI
 
 public final class VisualRuntimeSession {
-    private var host: VisualRuntimeHost
-    public var backendName: String {
-        String(host.backendName())
+  private var host: VisualRuntimeHost
+  public var backendName: String {
+    String(host.backendName())
+  }
+
+  public init?(libPath: String) {
+    let host = VisualRuntimeHost(std.string(libPath))
+    guard host.valid() else {
+      return nil
+    }
+    self.host = host
+  }
+
+  func attach(_ layer: CAMetalLayer) {
+    host.attachSurface(
+      Unmanaged.passUnretained(layer).toOpaque(),
+      layer.visualRuntimeSurfaceMetrics
+    )
+  }
+
+  func resize(_ metrics: VRTSurfaceMetrics) {
+    host.resize(metrics)
+  }
+
+  func setSceneSettings(_ settings: SceneSettings) {
+    host.setSceneSettings(settings.rawValue)
+  }
+
+  func changeView(_ build: (inout ViewChange) -> Void) {
+    var change = ViewChange()
+    build(&change)
+    guard !change.isEmpty else { return }
+    host.changeView(change.rawValue)
+  }
+
+  func screenToWorld(_ screenPoint: CGPoint) -> CGPoint? {
+    var world = VRTWorldPoint()
+    let ok = host.screenToWorld(
+      VRTScreenPoint(x_screen: screenPoint.x, y_screen: screenPoint.y),
+      &world
+    )
+    guard ok else { return nil }
+    return CGPoint(x: world.x_world, y: world.y_world)
+  }
+
+  func upsertShape(_ shape: ShapeDescriptor) {
+    host.upsertShape(shape.rawValue)
+  }
+
+  func upsertShape(_ shape: SceneShape) {
+    upsertShape(ShapeDescriptor(shape))
+  }
+
+  func panViewBy(x: Double, y: Double) {
+    changeView { change in
+      change.panBy(x: x, y: y)
+    }
+  }
+
+  func zoomViewBy(scale: Double, anchor: CGPoint) {
+    changeView { change in
+      change.zoomBy(scale: scale, anchor: anchor)
+    }
+  }
+
+  func zoomViewBy(logScale: Double, anchor: CGPoint) {
+    changeView { change in
+      change.zoomBy(logScale: logScale, anchor: anchor)
+    }
+  }
+
+  func tick(_ dt: Float) {
+    host.tick(dt)
+  }
+
+  func reload() {
+    _ = host.reload()
+  }
+}
+
+extension VisualRuntimeSession {
+  struct SceneSettings: Equatable {
+    let backgroundColor: ColorRGBA
+
+    init(backgroundColor: ColorRGBA) {
+      self.backgroundColor = backgroundColor
     }
 
-    public init?(libPath: String) {
-        let host = VisualRuntimeHost(std.string(libPath))
-        guard host.valid() else {
-            return nil
-        }
-        self.host = host
+    fileprivate var rawValue: VRTSceneSettings {
+      VRTSceneSettings(background_color: backgroundColor.rawValue)
+    }
+  }
+
+  struct ColorRGBA: Equatable {
+    let red: Float
+    let green: Float
+    let blue: Float
+    let alpha: Float
+
+    init(red: Float, green: Float, blue: Float, alpha: Float) {
+      self.red = red
+      self.green = green
+      self.blue = blue
+      self.alpha = alpha
     }
 
-    func attach(_ layer: CAMetalLayer) {
-        let size = layer.drawableSize
-        host.attachSurface(
-            Unmanaged.passUnretained(layer).toOpaque(),
-            UInt32(size.width),
-            UInt32(size.height)
-        )
+    fileprivate var rawValue: VRTColorRGBA {
+      VRTColorRGBA(r: red, g: green, b: blue, a: alpha)
+    }
+  }
+
+  struct ShapeDescriptor {
+    let id: VRTId
+    let kind: ShapeKind
+    let centerWorld: VRTVec2
+    let sizeWorld: VRTVec2
+    let color: ColorRGBA
+
+    init(
+      id: VRTId,
+      kind: ShapeKind,
+      centerWorld: VRTVec2,
+      sizeWorld: VRTVec2,
+      color: ColorRGBA
+    ) {
+      self.id = id
+      self.kind = kind
+      self.centerWorld = centerWorld
+      self.sizeWorld = sizeWorld
+      self.color = color
     }
 
-    func resize(width: UInt32, height: UInt32) {
-        host.resize(width, height)
+    init(_ shape: SceneShape) {
+      self.init(
+        id: VRTId(shape.id),
+        kind: ShapeKind(shape.kind),
+        centerWorld: VRTVec2(x: Double(shape.center.x), y: Double(shape.center.y)),
+        sizeWorld: VRTVec2(x: Double(shape.size.width), y: Double(shape.size.height)),
+        color: ColorRGBA(shape.color)
+      )
     }
 
-    func tick(_ dt: Float) {
-        host.tick(dt)
+    fileprivate var rawValue: VRTShapeDescriptor {
+      VRTShapeDescriptor(
+        id: id,
+        kind: kind.rawValue,
+        reserved: 0,
+        center_world: centerWorld,
+        size_world: sizeWorld,
+        color: color.rawValue
+      )
+    }
+  }
+
+  enum ShapeKind: Equatable {
+    case rectangle
+
+    init(_ kind: SceneShapeKind) {
+      switch kind {
+      case .rectangle:
+        self = .rectangle
+      }
     }
 
-    func reload() {
-        _ = host.reload()
+    fileprivate var rawValue: VRTShapeKind {
+      switch self {
+      case .rectangle:
+        VRTShapeKind.Rectangle
+      }
     }
+  }
+
+  struct ViewChange {
+    fileprivate private(set) var rawValue = VRTViewChange(
+      flags: VRTViewChange_None.rawValue,
+      reserved: 0,
+      pan_x_screen: 0,
+      pan_y_screen: 0,
+      zoom_delta_log_scale: 0,
+      zoom_anchor_x_screen: 0,
+      zoom_anchor_y_screen: 0
+    )
+
+    fileprivate var isEmpty: Bool {
+      rawValue.flags == VRTViewChange_None.rawValue
+    }
+
+    mutating func panBy(x: Double, y: Double) {
+      guard x.isFinite, y.isFinite, x != 0 || y != 0 else { return }
+      rawValue.flags |= VRTViewChange_Pan.rawValue
+      rawValue.pan_x_screen += x
+      rawValue.pan_y_screen += y
+    }
+
+    mutating func zoomBy(scale: Double, anchor: CGPoint) {
+      guard scale.isFinite, scale > 0 else { return }
+      zoomBy(logScale: log1p(scale - 1), anchor: anchor)
+    }
+
+    mutating func zoomBy(logScale: Double, anchor: CGPoint) {
+      guard logScale.isFinite,
+        anchor.x.isFinite,
+        anchor.y.isFinite
+      else { return }
+      rawValue.flags |= VRTViewChange_Zoom.rawValue
+      rawValue.zoom_delta_log_scale += logScale
+      rawValue.zoom_anchor_x_screen = anchor.x
+      rawValue.zoom_anchor_y_screen = anchor.y
+    }
+  }
+}
+
+private extension VisualRuntimeSession.ColorRGBA {
+  init(_ color: Color) {
+    let components = color.linearRGBAComponents
+    self.init(
+      red: Float(components.red),
+      green: Float(components.green),
+      blue: Float(components.blue),
+      alpha: Float(components.alpha)
+    )
+  }
+}
+
+extension CAMetalLayer {
+  var visualRuntimeSurfaceMetrics: VRTSurfaceMetrics {
+    VRTSurfaceMetrics(
+      pixel_width: UInt32(drawableSize.width),
+      pixel_height: UInt32(drawableSize.height),
+      screen_width: bounds.width,
+      screen_height: bounds.height
+    )
+  }
 }

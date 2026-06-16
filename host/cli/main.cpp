@@ -22,7 +22,7 @@ int main() {
 
   while (running) {
     if (runtime.reloadIfChanged())
-      std::printf("[host] reloaded (frame %llu)\n", runtime.frameCount());
+      std::printf("[host] reloaded\n");
 
     auto now = clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
@@ -33,5 +33,5 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
-  std::printf("\n[host] exiting after %llu frames\n", runtime.frameCount());
+  std::printf("\n[host] exiting\n");
 }

@@ -1,15 +1,29 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec2 in_position;
-layout(location = 1) in vec3 in_color;
 
-layout(location = 0) out vec3 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 layout(binding = 0) uniform FrameUniforms {
     mat4 matrix;
 } frame_uniforms;
 
+struct DrawableUniforms {
+    mat4 model_transform;
+    vec4 color;
+};
+
+layout(binding = 1) readonly buffer DrawableState {
+    DrawableUniforms drawable_uniforms;
+} drawable_states[];
+
+layout(push_constant) uniform DrawPush {
+    uint drawable_index;
+} draw_push;
+
 void main() {
-    gl_Position = frame_uniforms.matrix * vec4(in_position, 0.0, 1.0);
-    frag_color = in_color;
+    DrawableUniforms drawable = drawable_states[nonuniformEXT(draw_push.drawable_index)].drawable_uniforms;
+    gl_Position = frame_uniforms.matrix * drawable.model_transform * vec4(in_position, 0.0, 1.0);
+    frag_color = drawable.color;
 }

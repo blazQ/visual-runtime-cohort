@@ -28,26 +28,54 @@ std::string VisualRuntimeHost::backendName() const {
   return module_->backendName();
 }
 
-void VisualRuntimeHost::attachSurface(void *native_surface, uint32_t width,
-                                      uint32_t height) {
+void VisualRuntimeHost::attachSurface(void *native_surface,
+                                      const VRTSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
-  SurfaceDescriptor surface{
-      SurfaceKind::MacOSMetalLayer,
+  VRTSurfaceDescriptor surface{
+      VRTSurfaceKind::MacOSMetalLayer,
       nullptr,
       reinterpret_cast<uintptr_t>(native_surface),
-      width,
-      height,
+      metrics,
   };
   module_->attachSurface(surface);
 }
 
-void VisualRuntimeHost::resize(uint32_t width, uint32_t height) {
+void VisualRuntimeHost::resize(const VRTSurfaceMetrics &metrics) {
   if (!module_)
     return;
 
-  module_->resize(width, height);
+  module_->resize(metrics);
+}
+
+void VisualRuntimeHost::setSceneSettings(const VRTSceneSettings &settings) {
+  if (!module_)
+    return;
+
+  module_->setSceneSettings(settings);
+}
+
+void VisualRuntimeHost::changeView(const VRTViewChange &change) {
+  if (!module_)
+    return;
+
+  module_->changeView(change);
+}
+
+bool VisualRuntimeHost::screenToWorld(const VRTScreenPoint &screen,
+                                      VRTWorldPoint &world) {
+  if (!module_)
+    return false;
+
+  return module_->screenToWorld(screen, world);
+}
+
+void VisualRuntimeHost::upsertShape(const VRTShapeDescriptor &shape) {
+  if (!module_)
+    return;
+
+  module_->upsertShape(shape);
 }
 
 void VisualRuntimeHost::tick(float dt) {
@@ -55,7 +83,7 @@ void VisualRuntimeHost::tick(float dt) {
     return;
 
   if (module_->reloadIfChanged()) {
-    std::printf("[host] reloaded (frame %llu)\n", module_->frameCount());
+    std::printf("[host] reloaded\n");
   }
   module_->tick(dt);
 }
@@ -66,8 +94,7 @@ bool VisualRuntimeHost::reload() {
 
   bool ok = module_->reload();
   if (ok) {
-    std::printf("[host] manually reloaded (frame %llu)\n",
-                module_->frameCount());
+    std::printf("[host] manually reloaded\n");
   }
   return ok;
 }

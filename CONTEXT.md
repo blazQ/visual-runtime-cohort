@@ -40,6 +40,10 @@ _Avoid_: portable app shell, GLFW renderer, UI parity harness
 The reloadable dylib that owns visual behavior behind the visual runtime API boundary. Use this as the user-facing top-level concept instead of the generic term runtime when discussing rendering behavior.
 _Avoid_: renderer app, host, generic runtime
 
+**Scene**:
+The visual runtime's retained internal model of visual content derived from Visual Runtime API calls. At the current scale, the visual runtime may effectively be the scene; separate scene objects or renderer-preparation layers should only appear when they make the boundary clearer.
+_Avoid_: render world, product scene, backend state
+
 **Visual Runtime API Boundary**:
 The narrow C-compatible contract shared by the harness and the visual runtime.
 _Avoid_: renderer API, Metal API
@@ -52,16 +56,100 @@ _Avoid_: runtime renderer mode, host backend
 The product-shaped interface of the visual runtime for creating and updating visual state. It uses product terminology rather than generic renderer concepts unless the product itself needs those concepts. Callers use the API without knowing whether or how the runtime retains visual state internally. In the current harness, this API may begin as an internal runtime seam before being exposed across the visual runtime API boundary.
 _Avoid_: renderer API, RHI, backend API, premature mesh/material/object API
 
+**Shape Upsert**:
+A product-shaped request to create or replace scene shape content with a caller-chosen identity. Shape upserts describe the intended visual content in product terms and do not expose how the visual runtime stores or draws that content.
+_Avoid_: draw command, renderer object, GPU resource update
+
+**Shape Store**:
+The visual runtime's retained collection of product-shaped scene shape data, keyed by product-owned identity. A shape store describes what shapes exist in the scene; renderer handles, draw calls, backend resources, and sync caches belong to renderer-facing runtime state rather than to the shape store. A shape store should only be introduced when the visual runtime needs source shape data separately from drawable state.
+_Avoid_: drawable store, renderer facade, GPU resource cache
+
+**Shape Drawable**:
+Renderer-facing retained state for a shape that is keyed by product-owned shape identity. A shape drawable may retain the latest shape descriptor needed to update drawable state, but it is not a separate source-of-truth shape store.
+_Avoid_: public shape object, shape store, scene entity
+
+**Shape Descriptor**:
+The product-shaped value that describes one retained shape at the visual runtime boundary. A shape descriptor may be retained directly while the internal scene concept matches the boundary value, but ABI-only fields such as reserved space are not scene meaning.
+_Avoid_: renderer descriptor, GPU descriptor, backend shape
+
+**Internal Shape**:
+The visual runtime's C++ scene representation of a retained shape after crossing the C-compatible API boundary. Internal shapes use the visual runtime's C++ value vocabulary, such as GLM math types, rather than preserving ABI carrier types when no ABI compatibility is needed.
+_Avoid_: ABI shape copy, renderer descriptor, backend object
+
+**Staged Shape**:
+A scene shape owned by the scene model and visible in the visual runtime, but not yet committed into the main scene collection. Staging describes scene lifecycle rather than a special rendering style.
+_Avoid_: ghost object, temporary renderer object, preview-only drawable
+
+**Committed Shape**:
+A scene shape that is part of the main scene collection rather than the staging collection. Committed shape status does not imply a different visual runtime representation from staged shape status.
+_Avoid_: live renderer object, permanent GPU object
+
+**World Unit**:
+A scene-space unit used to describe retained visual content independently from the current surface size, pixel density, or camera/view. World units are not screen units, physical pixels, or normalized device coordinates.
+_Avoid_: screen point, framebuffer pixel, clip-space coordinate
+
+**World Point**:
+A point in scene-space world units, suitable for placing scene content independently from the current viewport. A world point may be derived from a surface-local screen point by the visual runtime because the visual runtime owns retained view state.
+_Avoid_: mouse point, screen coordinate, backend coordinate
+
+**World-Space Rectangle**:
+An axis-aligned rectangle in world units, described by its center position and size. It belongs to the scene rather than to the current viewport.
+_Avoid_: screen-space rectangle, viewport overlay, pixel bounds
+
+**Model Transform**:
+A shape-owned transform that maps the shape's local geometry into world space. For simple shapes, the model transform may carry placement and size while the local geometry stays canonical.
+_Avoid_: local transform, baked vertex position, viewport transform
+
+**Canonical Rectangle Geometry**:
+The reusable local-space rectangle shape before placement, sizing, or view projection is applied. Future stable local attributes, such as default texture coordinates, belong to this geometry rather than to the world transform.
+_Avoid_: pre-positioned rectangle vertices, per-instance rectangle mesh, world-space quad
+
+**View Intent Delta**:
+An already-interpreted visual change request passed to the visual runtime, such as a pan or zoom delta. Product and input logic decide the delta; the visual runtime applies it to its retained visual intention without owning raw input interpretation, acceleration, or smoothing policy.
+_Avoid_: raw gesture, input event, animation policy, smoothing command
+
+**Screen Unit**:
+A display-independent screen-space unit used for visual interaction deltas and anchors at the visual runtime boundary. On macOS this corresponds to points; on other harnesses it should correspond to logical pixels or an equivalent display-independent unit rather than physical framebuffer pixels.
+_Avoid_: physical pixel, framebuffer pixel, viewport ratio, world unit
+
+**Surface Metrics**:
+The paired drawable-pixel size and display-independent screen-unit size for a visual runtime surface. Pixel size drives graphics API drawable or swapchain sizing; screen size drives product-shaped interaction deltas and anchors.
+_Avoid_: raw framebuffer size, viewport-only size, mixed pixel/logical dimensions
+
+**Zoom Intent Delta**:
+A relative zoom change expressed as a logarithmic scale delta, anchored at a screen-space point. Positive values zoom in, negative values zoom out, and zero is a no-op. It is not a bounded or normalized absolute zoom level.
+_Avoid_: zoom level, normalized zoom, min/max zoom policy, raw wheel delta
+
+**View Change**:
+A product-shaped request to change the current view intention, such as panning and zooming together in one atomic interaction step. A view change is not a raw input event and should not encode input-device policy.
+_Avoid_: input event, camera command, renderer command, raw gesture
+
+**Scene Settings**:
+Product-shaped presentation preferences owned by the harness and supplied to the visual runtime as an absolute snapshot for the scene, such as the scene background color. Scene settings describe colors as linear RGBA values and are not renderer commands, backend options, or per-frame graphics descriptors.
+_Avoid_: renderer settings, render settings, generic parameters, user properties
+
+**Linear RGBA Color**:
+A semantic color value with red, green, blue, and alpha channels expressed in linear color space. At the visual runtime API boundary, color values should be named as colors rather than as generic four-float vectors.
+_Avoid_: generic float4, SIMD vector, GLM vector
+
+**Scene Settings Default**:
+The visual runtime's fallback scene settings used before a harness supplies its app-owned scene settings snapshot.
+_Avoid_: backend default, host-only default
+
 **Visual Runtime Feature Parity**:
 The expectation that a participant can work on the same visual-runtime behavior across supported harnesses, even when each harness has different native UI affordances.
 _Avoid_: harness UI parity, identical app shell
 
-**Render World**:
-The visual runtime's internal retained visual state derived from Visual Runtime API calls and consumed by renderer backends each frame. The render world is not exposed to the harness as a data structure and should not force product-facing concepts before product features require them.
-_Avoid_: product scene, harness world, backend state
+**Drawable Instance**:
+Renderer-owned state for one retained visual item. A drawable instance may cache geometry, transform, color, or backend upload state, but it should not prevent the visual runtime from sharing canonical geometry or other reusable resources as the renderer model matures.
+_Avoid_: public scene object, permanent unique mesh, harness-owned resource
+
+**Drawable Instance State**:
+The renderer-facing state for one drawable instance, derived from the render world and updated without changing canonical geometry. For rectangles, instance state includes the world transform and color.
+_Avoid_: baked vertex attributes, product shape descriptor, backend-only cache
 
 **Frame Config**:
-Product-shaped frame-level visual settings used by renderer backends, such as clear color or viewport-sized frame inputs. Frame config can be shared before richer product concepts exist because it describes frame intent rather than generic GPU resources. Its expected home is the runtime partition, not a renderer backend partition.
+Product-shaped frame-level visual settings used by renderer backends, such as clear color or current view presentation. Frame config is the visual runtime's canonical frame intent; backend-specific shader uniforms or upload caches are implementation details derived from it. Its expected home is the runtime partition, not a renderer backend partition.
 _Avoid_: pipeline config, render pass descriptor, backend settings
 
 **Runtime Partition**:
@@ -93,6 +181,10 @@ Domain expert: "In the Vulkan backend partition. Metal and Vulkan assets should 
 Dev: "Where should clear color live if both Metal and Vulkan need it?"
 
 Domain expert: "If it expresses product-shaped frame intent, put it in the runtime partition as frame config. Do not create a generic renderer abstraction just to deduplicate backend code."
+
+Dev: "Should the harness call this renderer settings?"
+
+Domain expert: "No. The harness supplies scene settings, and the visual runtime derives frame config and backend details from them."
 
 Dev: "Should the Linux harness match the macOS harness UI?"
 

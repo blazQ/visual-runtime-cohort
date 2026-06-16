@@ -13,11 +13,28 @@
 #endif
 
 #include <cstdio>
+#include <cstring>
 #include <utility>
 
 namespace visual_runtime::vulkan {
 
 namespace {
+
+constexpr const char *kPortabilitySubsetExtensionName =
+    "VK_KHR_portability_subset";
+
+bool descriptor_indexing_features_supported(
+    const VkPhysicalDeviceFeatures2 &features,
+    const VkPhysicalDeviceDescriptorIndexingFeatures
+        &descriptor_indexing_features) {
+  return features.features.shaderStorageBufferArrayDynamicIndexing &&
+         descriptor_indexing_features.runtimeDescriptorArray &&
+         descriptor_indexing_features
+             .shaderStorageBufferArrayNonUniformIndexing &&
+         descriptor_indexing_features.descriptorBindingPartiallyBound &&
+         descriptor_indexing_features
+             .descriptorBindingStorageBufferUpdateAfterBind;
+}
 
 QueueFamilies find_queue_families(VkPhysicalDevice physical_device,
                                   VkSurfaceKHR surface) {
@@ -60,13 +77,13 @@ bool queue_families_complete(const QueueFamilies &families) {
          families.present != invalid_queue_family;
 }
 
-bool VulkanContext::init(SurfaceDescriptor *surface) {
-  if (!surface || surface->kind == SurfaceKind::None ||
+bool VulkanContext::init(VRTSurfaceDescriptor *surface) {
+  if (!surface || surface->kind == VRTSurfaceKind::None ||
       surface->surface_handle == 0) {
     return false;
   }
-  if ((surface->kind == SurfaceKind::LinuxXcbWindow ||
-       surface->kind == SurfaceKind::LinuxWaylandSurface) &&
+  if ((surface->kind == VRTSurfaceKind::LinuxXcbWindow ||
+       surface->kind == VRTSurfaceKind::LinuxWaylandSurface) &&
       !surface->display_handle) {
     return false;
   }
@@ -104,7 +121,7 @@ void VulkanContext::shutdown() {
   }
 }
 
-bool VulkanContext::create_instance(SurfaceKind surface_kind) {
+bool VulkanContext::create_instance(VRTSurfaceKind surface_kind) {
   std::vector<VkExtensionProperties> available_extensions;
   if (!enumerate_instance_extensions(available_extensions)) {
     return false;
@@ -112,7 +129,7 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
 
   std::vector<const char *> extensions{VK_KHR_SURFACE_EXTENSION_NAME};
 #if defined(__APPLE__)
-  if (surface_kind == SurfaceKind::MacOSMetalLayer) {
+  if (surface_kind == VRTSurfaceKind::MacOSMetalLayer) {
     extensions.push_back(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
   }
 #if defined(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
@@ -128,10 +145,10 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
   bool enable_portability_enumeration = false;
 #endif
 #if defined(__linux__)
-  if (surface_kind == SurfaceKind::LinuxXcbWindow) {
+  if (surface_kind == VRTSurfaceKind::LinuxXcbWindow) {
     extensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
   }
-  if (surface_kind == SurfaceKind::LinuxWaylandSurface) {
+  if (surface_kind == VRTSurfaceKind::LinuxWaylandSurface) {
     extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
   }
 #endif
@@ -163,9 +180,9 @@ bool VulkanContext::create_instance(SurfaceKind surface_kind) {
                   "failed to create Vulkan instance");
 }
 
-bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
+bool VulkanContext::create_surface(const VRTSurfaceDescriptor &surface) {
 #if defined(__APPLE__)
-  if (surface.kind == SurfaceKind::MacOSMetalLayer) {
+  if (surface.kind == VRTSurfaceKind::MacOSMetalLayer) {
     auto create_metal_surface = reinterpret_cast<PFN_vkCreateMetalSurfaceEXT>(
         vkGetInstanceProcAddr(instance_, "vkCreateMetalSurfaceEXT"));
     if (!create_metal_surface) {
@@ -184,7 +201,7 @@ bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
   }
 #endif
 #if defined(__linux__)
-  if (surface.kind == SurfaceKind::LinuxXcbWindow) {
+  if (surface.kind == VRTSurfaceKind::LinuxXcbWindow) {
     auto create_xcb_surface = reinterpret_cast<PFN_vkCreateXcbSurfaceKHR>(
         vkGetInstanceProcAddr(instance_, "vkCreateXcbSurfaceKHR"));
     if (!create_xcb_surface) {
@@ -202,7 +219,7 @@ bool VulkanContext::create_surface(const SurfaceDescriptor &surface) {
         create_xcb_surface(instance_, &create_info, nullptr, &surface_),
         "failed to create Vulkan XCB surface");
   }
-  if (surface.kind == SurfaceKind::LinuxWaylandSurface) {
+  if (surface.kind == VRTSurfaceKind::LinuxWaylandSurface) {
     auto create_wayland_surface =
         reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(
             vkGetInstanceProcAddr(instance_, "vkCreateWaylandSurfaceKHR"));
@@ -283,19 +300,26 @@ bool VulkanContext::physical_device_suitable(
     return false;
   }
 
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+  descriptor_indexing_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+
   VkPhysicalDeviceVulkan13Features vulkan13_features{};
   vulkan13_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13_features.pNext = &descriptor_indexing_features;
 
   VkPhysicalDeviceFeatures2 features{};
   features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   features.pNext = &vulkan13_features;
   vkGetPhysicalDeviceFeatures2(physical_device, &features);
   if (!vulkan13_features.dynamicRendering ||
-      !vulkan13_features.synchronization2) {
+      !vulkan13_features.synchronization2 ||
+      !descriptor_indexing_features_supported(features,
+                                              descriptor_indexing_features)) {
     std::fprintf(stderr,
-                 "[renderer] rejecting Vulkan device %s: dynamic rendering "
-                 "and synchronization2 are required\n",
+                 "[renderer] rejecting Vulkan device %s: dynamic rendering, "
+                 "synchronization2, and descriptor indexing are required\n",
                  properties.deviceName);
     return false;
   }
@@ -306,12 +330,10 @@ bool VulkanContext::physical_device_suitable(
   }
 
   device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-#if defined(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)
   if (extension_available(available_extensions,
-                          VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
-    device_extensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+                          kPortabilitySubsetExtensionName)) {
+    device_extensions.push_back(kPortabilitySubsetExtensionName);
   }
-#endif
 
   if (!required_extensions_available(
           available_extensions, device_extensions.data(),
@@ -365,15 +387,27 @@ bool VulkanContext::create_device() {
     queue_infos.push_back(queue_info);
   }
 
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+  descriptor_indexing_features.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
+  descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing =
+      VK_TRUE;
+  descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+  descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind =
+      VK_TRUE;
+
   VkPhysicalDeviceVulkan13Features vulkan13_features{};
   vulkan13_features.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  vulkan13_features.pNext = &descriptor_indexing_features;
   vulkan13_features.dynamicRendering = VK_TRUE;
   vulkan13_features.synchronization2 = VK_TRUE;
 
   VkPhysicalDeviceFeatures2 features{};
   features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   features.pNext = &vulkan13_features;
+  features.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
 
   VkDeviceCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

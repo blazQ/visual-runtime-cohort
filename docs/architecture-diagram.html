@@ -467,16 +467,16 @@
           <div class="boundary-label">Visual Runtime API Boundary</div>
           <div class="boundary-items">
             <div class="item">
-              VisualRuntimeAPI
-              <div class="tooltip">C struct of function pointers:<br>init, resize, update, shutdown.</div>
+              VRTAPI
+              <div class="tooltip">C struct of function pointers:<br>init, resize, change_view, update, shutdown.</div>
             </div>
             <div class="item">
-              SurfaceDescriptor
-              <div class="tooltip">macOS Metal layer handle + width/height<br>passed to the visual runtime on init.</div>
+              VRTSurfaceDescriptor
+              <div class="tooltip">Platform surface handle + surface metrics<br>passed to the visual runtime on init.</div>
             </div>
             <div class="item">
-              VisualRuntimeState
-              <div class="tooltip">Mutable frame counter &amp; elapsed time<br>the visual runtime updates each tick.</div>
+              VRTState
+              <div class="tooltip">Opaque ABI carrier for the private<br>C++ VisualRuntime orchestrator object.</div>
             </div>
             <div class="item">
               visual_runtime_get_api
@@ -498,7 +498,11 @@
             <div class="items">
               <div class="item">
                 visual_runtime.cpp
-                <div class="tooltip">Static API table + lifecycle impls<br>that forward to the Renderer.</div>
+                <div class="tooltip">Static API table + lifecycle impls<br>that translate the C boundary.</div>
+              </div>
+              <div class="item">
+                VisualRuntime
+                <div class="tooltip">Private C++ orchestrator owning<br>renderer, frame count, and elapsed time.</div>
               </div>
             </div>
           </div>
@@ -507,7 +511,7 @@
             <div class="items">
               <div class="item">
                 Renderer
-                <div class="tooltip">Backend-agnostic frontend.<br>Type-erases RendererBackend via pimpl.</div>
+                <div class="tooltip">Render-facing frontend owned by VisualRuntime.<br>Type-erases RendererBackend via pimpl.</div>
               </div>
               <div class="item">
                 RendererBackend
