@@ -2,6 +2,7 @@
 
 #include "frame_config.h"
 #include "visual_runtime/api.h"
+#include "visual_runtime/types.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +32,7 @@ struct Renderer {
   struct DrawableState {
     glm::mat4 model_transform{1.0f};
     glm::vec4 color{1.0f};
+    VRTShapeKind kind{VRTShapeKind::Rectangle};
   };
 
   Renderer();

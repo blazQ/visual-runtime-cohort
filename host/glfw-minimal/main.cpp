@@ -15,12 +15,22 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 namespace {
 
 struct AppState {
   VisualRuntimeModule *runtime = nullptr;
+  bool panning = false;
+  double last_pan_x_screen = 0.0;
+  double last_pan_y_screen = 0.0;
+  VRTId next_shape_id = 1;
 };
+
+// Zoom sensitivity applied per scroll notch, in log-scale units.
+constexpr double kZoomLogScalePerScrollStep = 0.15;
+// Side length of a placed rectangle, in world units.
+constexpr double kPlacedShapeSizeWorld = 0.2;
 
 void glfw_error(int code, const char *description) {
   std::fprintf(stderr, "[glfw-minimal] GLFW error %d: %s\n", code,
@@ -41,6 +51,120 @@ void framebuffer_resized(GLFWwindow *window, int width, int height) {
   state->runtime->resize(visual_runtime::metrics_1x(
       static_cast<uint32_t>(width), static_cast<uint32_t>(height)));
   std::fprintf(stderr, "[glfw-minimal] resized to %dx%d\n", width, height);
+}
+
+// The runtime's screen space is the framebuffer-pixel space (see the metrics we
+// hand it on attach/resize), but GLFW cursor positions are in window
+// coordinates. On scaled displays those differ, so map the cursor into
+// framebuffer pixels before handing points to the runtime.
+void cursor_screen_point(GLFWwindow *window, double &x_screen,
+                         double &y_screen) {
+  double cursor_x = 0.0;
+  double cursor_y = 0.0;
+  glfwGetCursorPos(window, &cursor_x, &cursor_y);
+
+  int window_width = 0;
+  int window_height = 0;
+  glfwGetWindowSize(window, &window_width, &window_height);
+
+  int framebuffer_width = 0;
+  int framebuffer_height = 0;
+  glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
+
+  const double scale_x = window_width > 0
+                             ? static_cast<double>(framebuffer_width) /
+                                   static_cast<double>(window_width)
+                             : 1.0;
+  const double scale_y = window_height > 0
+                             ? static_cast<double>(framebuffer_height) /
+                                   static_cast<double>(window_height)
+                             : 1.0;
+  x_screen = cursor_x * scale_x;
+  y_screen = cursor_y * scale_y;
+}
+
+// Left click places a rectangle at the cursor; right/middle drag pans.
+void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state || !state->runtime) {
+    return;
+  }
+
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+    double x_screen = 0.0;
+    double y_screen = 0.0;
+    cursor_screen_point(window, x_screen, y_screen);
+
+    VRTWorldPoint world{};
+    if (!state->runtime->screenToWorld(VRTScreenPoint{x_screen, y_screen},
+                                       world)) {
+      return;
+    }
+
+    state->runtime->upsertShape(VRTShapeDescriptor{
+        state->next_shape_id++,
+        VRTShapeKind::Circle,
+        /*reserved=*/0,
+        VRTVec2{world.x_world, world.y_world},
+        VRTVec2{kPlacedShapeSizeWorld, kPlacedShapeSizeWorld},
+        VRTColorRGBA{0.20f, 0.60f, 0.95f, 1.0f},
+    });
+    return;
+  }
+
+  if (button == GLFW_MOUSE_BUTTON_RIGHT || button == GLFW_MOUSE_BUTTON_MIDDLE) {
+    if (action == GLFW_PRESS) {
+      state->panning = true;
+      cursor_screen_point(window, state->last_pan_x_screen,
+                          state->last_pan_y_screen);
+    } else if (action == GLFW_RELEASE) {
+      state->panning = false;
+    }
+  }
+}
+
+// While a pan drag is active, translate cursor motion into a view pan.
+void cursor_moved(GLFWwindow *window, double /*x*/, double /*y*/) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state || !state->runtime || !state->panning) {
+    return;
+  }
+
+  double x_screen = 0.0;
+  double y_screen = 0.0;
+  cursor_screen_point(window, x_screen, y_screen);
+  const double dx = x_screen - state->last_pan_x_screen;
+  const double dy = y_screen - state->last_pan_y_screen;
+  state->last_pan_x_screen = x_screen;
+  state->last_pan_y_screen = y_screen;
+  if (dx == 0.0 && dy == 0.0) {
+    return;
+  }
+
+  VRTViewChange change{};
+  change.flags = VRTViewChange_Pan;
+  change.pan_x_screen = dx;
+  change.pan_y_screen = dy;
+  state->runtime->changeView(change);
+}
+
+// Scroll zooms about the cursor: scroll up (positive) zooms in.
+void scrolled(GLFWwindow *window, double /*x_offset*/, double y_offset) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state || !state->runtime || y_offset == 0.0) {
+    return;
+  }
+
+  double x_screen = 0.0;
+  double y_screen = 0.0;
+  cursor_screen_point(window, x_screen, y_screen);
+
+  VRTViewChange change{};
+  change.flags = VRTViewChange_Zoom;
+  change.zoom_delta_log_scale = y_offset * kZoomLogScalePerScrollStep;
+  change.zoom_anchor_x_screen = x_screen;
+  change.zoom_anchor_y_screen = y_screen;
+  state->runtime->changeView(change);
 }
 
 #if defined(__linux__)
@@ -199,12 +323,21 @@ int main() {
   AppState state{&runtime};
   glfwSetWindowUserPointer(window, &state);
   glfwSetFramebufferSizeCallback(window, framebuffer_resized);
+  glfwSetMouseButtonCallback(window, mouse_button);
+  glfwSetCursorPosCallback(window, cursor_moved);
+  glfwSetScrollCallback(window, scrolled);
 
   if (!attach_surface(window, runtime)) {
     glfwDestroyWindow(window);
     glfwTerminate();
     return 1;
   }
+
+  // Start with an empty canvas on a dark background; the scene is built by
+  // interaction: left-click to place a rectangle, scroll to zoom, right/middle
+  // drag to pan.
+  runtime.setSceneSettings(
+      VRTSceneSettings{VRTColorRGBA{0.09f, 0.10f, 0.12f, 1.0f}});
 
   using clock = std::chrono::steady_clock;
   auto last = clock::now();

@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "visual_runtime/types.h"
 #include "vulkan_context.hpp"
 #include "vulkan_frame_resources.hpp"
 #include "vulkan_pipeline.hpp"
@@ -38,6 +39,7 @@ struct FrameUniforms {
 struct DrawableUniforms {
   glm::mat4 model_transform{1.0f};
   glm::vec4 color{1.0f};
+  VRTShapeKind shape_kind;
 };
 
 struct Drawable {
@@ -307,6 +309,7 @@ void RendererBackend::update_drawable(DrawableHandle handle,
   const DrawableUniforms uniforms{
       state.model_transform,
       state.color,
+      state.kind,
   };
   write_buffer(drawable->state_buffer_memory, &uniforms, sizeof(uniforms),
                "failed to map Vulkan drawable state buffer");

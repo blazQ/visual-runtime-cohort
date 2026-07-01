@@ -78,6 +78,7 @@ struct VRTColorRGBA {
 
 enum class VRTShapeKind : uint32_t {
   Rectangle = 1,
+  Circle = 2,
 };
 
 // Product-shaped request to create or replace scene shape content. Positions

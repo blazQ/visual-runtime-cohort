@@ -100,6 +100,7 @@ Renderer::DrawableState drawable_state_for(const Shape &shape) {
                                static_cast<float>(shape.bounds.size_world.y),
                                1.0f}),
       shape.color,
+      shape.kind
   };
 }
 
@@ -151,8 +152,7 @@ public:
   }
 
   void upsert_shape(const VRTShapeDescriptor &shape) {
-    if (shape.id == 0 || shape.reserved != 0 ||
-        shape.kind != VRTShapeKind::Rectangle) {
+    if (shape.id == 0 || shape.reserved != 0) {
       return;
     }
 
