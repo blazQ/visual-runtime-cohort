@@ -223,6 +223,8 @@ int main() {
   }
 
   std::printf("[glfw-minimal] exiting\n");
+
+  runtime.shutdown();
   glfwDestroyWindow(window);
   glfwTerminate();
   return 0;
