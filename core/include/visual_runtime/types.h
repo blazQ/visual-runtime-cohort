@@ -72,6 +72,10 @@ struct VRTColorRGBA {
   float g;
   float b;
   float a;
+
+  bool operator==(const VRTColorRGBA &other) const {
+    return r == other.r && g == other.g && b == other.b && a == other.a;
+  }
 };
 
 // Scene shapes ---------------------------------------------------------------
@@ -97,6 +101,10 @@ struct VRTShapeDescriptor {
 
 struct VRTSceneSettings {
   VRTColorRGBA background_color;
+
+  bool operator==(const VRTSceneSettings &other) const {
+    return background_color == other.background_color;
+  }
 };
 
 // View changes ---------------------------------------------------------------

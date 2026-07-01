@@ -39,7 +39,7 @@ struct FrameUniforms {
 struct DrawableUniforms {
   glm::mat4 model_transform{1.0f};
   glm::vec4 color{1.0f};
-  VRTShapeKind shape_kind;
+  Renderer::PrimitiveKind shape_kind = Renderer::PrimitiveKind::Rectangle;
 };
 
 struct Drawable {

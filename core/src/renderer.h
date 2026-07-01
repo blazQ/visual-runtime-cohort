@@ -29,10 +29,18 @@ struct Renderer {
     size_t vertex_count = 0;
   };
 
+  // Which primitive the drawable is filled as. This is the renderer's own
+  // vocabulary (it selects the fragment fill / SDF), independent of the
+  // product's shape taxonomy. Values match the fragment shader's expectations.
+  enum class PrimitiveKind : uint32_t {
+    Rectangle = 1,
+    Circle = 2,
+  };
+
   struct DrawableState {
     glm::mat4 model_transform{1.0f};
     glm::vec4 color{1.0f};
-    VRTShapeKind kind{VRTShapeKind::Rectangle};
+    PrimitiveKind kind{PrimitiveKind::Rectangle};
   };
 
   Renderer();
