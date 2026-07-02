@@ -2,6 +2,7 @@
 #include "scene.h"
 #include "view_state.h"
 #include "visual_runtime/api.h"
+#include "visual_runtime/types.h"
 
 #include <array>
 #include <glm/ext/matrix_transform.hpp>
@@ -31,6 +32,14 @@ Renderer::PrimitiveKind primitive_kind_for(VRTShapeKind kind) {
   return Renderer::PrimitiveKind::Rectangle;
 }
 
+Renderer::TextureFormat texture_format_for(VRTPixelFormat format){
+  switch (format) {
+    case VRTPixelFormat::RGBA8Srgb: return Renderer::TextureFormat::RGBA8Srgb;
+    case VRTPixelFormat::RGBA8Unorm: return Renderer::TextureFormat::RGBA8Unorm;
+  }
+  return Renderer::TextureFormat::RGBA8Srgb;
+}
+
 constexpr glm::vec4 kPlaceholderColor{1.0f};
 
 // Shared local geometry; rectangle placement and color live in drawable state.
@@ -43,20 +52,41 @@ constexpr std::array<Renderer::Vertex, 6> kQuadVertices{{
     Renderer::Vertex{glm::vec2{-0.5f, 0.5f}, kPlaceholderColor},
 }};
 
-Renderer::DrawableState drawable_state_for(const Shape &shape) {
-  return Renderer::DrawableState{
-      glm::translate(glm::mat4{1.0f},
-                     glm::vec3{static_cast<float>(shape.bounds.center_world.x),
-                               static_cast<float>(shape.bounds.center_world.y),
+glm::mat4 model_transform_for(const WorldBounds &bounds) { 
+  return       glm::translate(glm::mat4{1.0f},
+                     glm::vec3{static_cast<float>(bounds.center_world.x),
+                               static_cast<float>(bounds.center_world.y),
                                0.0f}) *
           glm::scale(glm::mat4{1.0f},
-                     glm::vec3{static_cast<float>(shape.bounds.size_world.x),
-                               static_cast<float>(shape.bounds.size_world.y),
-                               1.0f}),
+                     glm::vec3{static_cast<float>(bounds.size_world.x),
+                               static_cast<float>(bounds.size_world.y),
+                               1.0f});
+};
+
+
+Renderer::DrawableState drawable_state_for(const Shape &shape) {
+  return Renderer::DrawableState{model_transform_for(shape.bounds),
       color_to_vec4(shape.color),
       primitive_kind_for(shape.kind),
   };
 }
+
+Renderer::DrawableState image_state_for(const Image &image,
+                                        Renderer::TextureHandle texture) {
+  return Renderer::DrawableState{
+      model_transform_for(image.bounds),
+      glm::vec4{1.0f},                     // unused for images (a white tint)
+      Renderer::PrimitiveKind::Rectangle,
+      texture,
+  };
+}
+
+
+struct ImageEntry {
+  VRTId id;
+  Renderer::DrawableHandle drawable;
+  Renderer::TextureHandle texture;
+};
 
 // Private C++ owner for one visual runtime instance. It owns the Renderer and
 // the Scene, and reconciles retained Scene content into renderer drawables.
@@ -71,10 +101,6 @@ public:
   }
 
   ~VisualRuntime() {
-    // Release drawables before the renderer/surface they were created from.
-    for (const auto &entry : shape_handles_) {
-      renderer_.destroy_drawable(entry.second);
-    }
     renderer_.shutdown();
   }
 
@@ -127,12 +153,43 @@ public:
     }
   }
 
+  void upsert_image(const VRTImageDescriptor &descriptor) {
+    switch (scene_.upsert_image(descriptor)) {
+    case Scene::Change::Unchanged:
+      return;
+    case Scene::Change::Created: {
+      const Renderer::TextureDesc texture_desc{descriptor.pixels.pixels, 
+        descriptor.pixels.width, 
+        descriptor.pixels.height, 
+        texture_format_for(descriptor.pixels.format)};
+      const Renderer::TextureHandle texture_handle = renderer_.create_texture(texture_desc);
+
+      const Renderer::DrawableDesc quad{kQuadVertices.data(), kQuadVertices.size()};
+      const Renderer::DrawableHandle drawable_handle = renderer_.create_drawable(quad);
+      
+      image_handles_.push_back({descriptor.id, drawable_handle, texture_handle});
+      renderer_.update_drawable(drawable_handle, image_state_for(*scene_.find_image(descriptor.id), texture_handle));
+      return;
+    }
+    case Scene::Change::Updated:
+      if (ImageEntry *entry = find_image_handle(descriptor.id)){
+        renderer_.update_drawable(entry->drawable, image_state_for(*scene_.find_image(descriptor.id), entry->texture));
+      }
+      return;
+    }
+  }
+
   void update(float dt) {
     elapsed_time_ += dt;
     if (renderer_.begin_frame(elapsed_time_)) {
       for (const auto &entry : shape_handles_) {
         renderer_.draw(entry.second);
       }
+
+      for (const auto &entry : image_handles_){
+        renderer_.draw(entry.drawable);
+      }
+
       renderer_.end_frame();
     }
   }
@@ -142,6 +199,15 @@ private:
     for (auto &entry : shape_handles_) {
       if (entry.first == id) {
         return &entry.second;
+      }
+    }
+    return nullptr;
+  }
+
+  ImageEntry *find_image_handle(VRTId id) {
+    for (auto &entry : image_handles_) {
+      if (entry.id == id) {
+        return &entry;
       }
     }
     return nullptr;
@@ -157,6 +223,7 @@ private:
   ViewState view_state_;
   Renderer renderer_;
   std::vector<std::pair<VRTId, Renderer::DrawableHandle>> shape_handles_;
+  std::vector<ImageEntry> image_handles_;
   float elapsed_time_ = 0.0f;
 };
 
@@ -226,6 +293,12 @@ void upsert_shape(VRTState *state, const VRTShapeDescriptor *shape) {
   }
 }
 
+void upsert_image(VRTState *state, const VRTImageDescriptor *image) {
+  if (auto *rt = runtime(state); rt && image) {
+    rt->upsert_image(*image);
+  }
+}
+
 // Advance and render one runtime tick.
 void update(VRTState *state, float dt) {
   if (auto *rt = runtime(state)) {
@@ -251,7 +324,8 @@ const VRTAPI *visual_runtime_get_api() {
       VISUAL_RUNTIME_BACKEND_NAME, api_callbacks::init,
       api_callbacks::resize,       api_callbacks::set_scene_settings,
       api_callbacks::change_view,  api_callbacks::screen_to_world,
-      api_callbacks::upsert_shape, api_callbacks::update,
+      api_callbacks::upsert_shape, api_callbacks::upsert_image,
+      api_callbacks::update,
       api_callbacks::shutdown,
   };
   return &api;

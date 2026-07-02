@@ -78,6 +78,18 @@ struct VRTColorRGBA {
   }
 };
 
+enum class VRTPixelFormat : uint32_t {
+  RGBA8Srgb = 1,// 4 bytes/pixel
+  RGBA8Unorm = 2, // 4 bytes/pixel
+};
+
+struct VRTPixelBuffer {
+  const void *pixels;
+  uint32_t width;
+  uint32_t height;
+  VRTPixelFormat format;
+};
+
 // Scene shapes ---------------------------------------------------------------
 
 enum class VRTShapeKind : uint32_t {
@@ -95,6 +107,14 @@ struct VRTShapeDescriptor {
   VRTVec2 center_world;
   VRTVec2 size_world;
   VRTColorRGBA color;
+};
+
+struct VRTImageDescriptor {
+  VRTId id;
+  uint32_t reserved;
+  VRTVec2 center_world;
+  VRTVec2 size_world;
+  VRTPixelBuffer pixels;
 };
 
 // Scene settings -------------------------------------------------------------

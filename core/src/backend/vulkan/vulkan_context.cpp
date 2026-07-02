@@ -33,7 +33,9 @@ bool descriptor_indexing_features_supported(
              .shaderStorageBufferArrayNonUniformIndexing &&
          descriptor_indexing_features.descriptorBindingPartiallyBound &&
          descriptor_indexing_features
-             .descriptorBindingStorageBufferUpdateAfterBind;
+             .descriptorBindingStorageBufferUpdateAfterBind && 
+             descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing && 
+             descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind;
 }
 
 QueueFamilies find_queue_families(VkPhysicalDevice physical_device,
@@ -395,6 +397,10 @@ bool VulkanContext::create_device() {
       VK_TRUE;
   descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
   descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind =
+      VK_TRUE;
+  descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing =
+      VK_TRUE;
+  descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind =
       VK_TRUE;
 
   VkPhysicalDeviceVulkan13Features vulkan13_features{};

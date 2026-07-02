@@ -56,6 +56,11 @@ struct VisualRuntimeModule {
       api_.upsert_shape(&state_, &shape);
   }
 
+  void upsertImage(const VRTImageDescriptor &image) const {
+    if (initialized_ && api_.upsert_image)
+      api_.upsert_image(&state_, &image);
+  }
+
   bool reloadIfChanged() {
     if (!lib_.changed())
       return false;

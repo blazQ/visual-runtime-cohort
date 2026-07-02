@@ -13,10 +13,15 @@ layout(location = 1) out vec2 frag_local;
 
 layout(location = 2) flat out uint frag_shape_kind;
 
+layout(location = 3) out vec2 frag_uv;
+
+layout(location = 4) flat out uint frag_texture_index;
+
 struct DrawableUniforms {
     mat4 model_transform;
     vec4 color;
     uint kind;
+    uint texture_index;
 };
 
 layout(binding = 1) readonly buffer DrawableState {
@@ -33,4 +38,6 @@ void main() {
     frag_color = drawable.color;
     frag_shape_kind = drawable.kind;
     frag_local = in_position;
+    frag_uv = in_position + 0.5;
+    frag_texture_index = drawable.texture_index;
 }

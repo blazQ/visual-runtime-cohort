@@ -1,7 +1,6 @@
 #pragma once
 
 #include "frame_config.h"
-#include "visual_runtime/api.h"
 #include "visual_runtime/types.h"
 
 #include <cstddef>
@@ -29,6 +28,22 @@ struct Renderer {
     size_t vertex_count = 0;
   };
 
+  enum class TextureFormat : uint32_t {
+    RGBA8Srgb = 1,
+    RGBA8Unorm = 2,
+  };
+
+  struct TextureHandle {
+    uint32_t value = 0;
+  };
+
+  struct TextureDesc {
+    const void *pixels;
+    uint32_t width;
+    uint32_t height;
+    TextureFormat format;
+  };
+
   // Which primitive the drawable is filled as. This is the renderer's own
   // vocabulary (it selects the fragment fill / SDF), independent of the
   // product's shape taxonomy. Values match the fragment shader's expectations.
@@ -41,8 +56,9 @@ struct Renderer {
     glm::mat4 model_transform{1.0f};
     glm::vec4 color{1.0f};
     PrimitiveKind kind{PrimitiveKind::Rectangle};
+    TextureHandle texture{};
   };
-
+  
   Renderer();
   ~Renderer();
 
@@ -57,6 +73,8 @@ struct Renderer {
   DrawableHandle create_drawable(const DrawableDesc &desc);
   void update_drawable(DrawableHandle handle, const DrawableState &state);
   void destroy_drawable(DrawableHandle handle);
+  TextureHandle create_texture(const TextureDesc &desc);
+  void destroy_texture(TextureHandle handle);
   bool begin_frame(float t);
   void draw(DrawableHandle handle);
   void end_frame();
