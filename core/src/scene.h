@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <glm/vec2.hpp>
+#include <glm/common.hpp>
 #include <vector>
 
 // Axis-aligned world-space bounds for a shape: center and size in world units.
@@ -13,6 +14,11 @@ struct WorldBounds {
 
   bool operator==(const WorldBounds &other) const {
     return center_world == other.center_world && size_world == other.size_world;
+  }
+
+  bool contains(glm::dvec2 point) const {
+    const glm::dvec2 d = glm::abs(point - center_world);
+    return d.x <= size_world.x * 0.5 && d.y <= size_world.y * 0.5;
   }
 };
 
@@ -88,6 +94,17 @@ public:
   const VRTColorRGBA &background_color() const {
     return scene_settings_.background_color;
   }
+
+  VRTId item_at(glm::dvec2 world) const {
+  // topmost first: images draw over shapes, later items over earlier — so
+  // walk images reverse, then shapes reverse
+    for (auto it = images_.rbegin(); it != images_.rend(); ++it)
+      if (it->bounds.contains(world)) return it->id;
+    for (auto it = shapes_.rbegin(); it != shapes_.rend(); ++it)
+      if (it->bounds.contains(world)) return it->id;
+    return 0;
+  }
+
 
 private:
   template <class T>

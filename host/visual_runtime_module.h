@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dynamic_library.h"
+#include "visual_runtime/types.h"
 #include "visual_runtime_api.h"
 
 #include <utility>
@@ -59,6 +60,12 @@ struct VisualRuntimeModule {
   void upsertImage(const VRTImageDescriptor &image) const {
     if (initialized_ && api_.upsert_image)
       api_.upsert_image(&state_, &image);
+  }
+
+  VRTId hit_test(const VRTScreenPoint &screen) const {
+    if (initialized_ && api_.hit_test)
+      return api_.hit_test(&state_, &screen);
+    return VRTId{};
   }
 
   bool reloadIfChanged() {

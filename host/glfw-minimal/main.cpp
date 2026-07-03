@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
+#include <vector>
 
 namespace {
 
@@ -42,48 +42,35 @@ bool env_set(const char *name) {
   return value && value[0] != '\0';
 }
 
+VRTSurfaceMetrics surface_metrics(GLFWwindow *window) {
+  int pixel_width = 0;
+  int pixel_height = 0;
+  glfwGetFramebufferSize(window, &pixel_width, &pixel_height);
+
+  int screen_width = 0;
+  int screen_height = 0;
+  glfwGetWindowSize(window, &screen_width, &screen_height);
+
+  return VRTSurfaceMetrics{
+      static_cast<uint32_t>(pixel_width),
+      static_cast<uint32_t>(pixel_height),
+      static_cast<double>(screen_width),
+      static_cast<double>(screen_height),
+  };
+}
+
 void framebuffer_resized(GLFWwindow *window, int width, int height) {
   auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
   if (!state || !state->runtime) {
     return;
   }
 
-  state->runtime->resize(visual_runtime::metrics_1x(
-      static_cast<uint32_t>(width), static_cast<uint32_t>(height)));
+  state->runtime->resize(surface_metrics(window));
   std::fprintf(stderr, "[glfw-minimal] resized to %dx%d\n", width, height);
 }
 
-// The runtime's screen space is the framebuffer-pixel space (see the metrics we
-// hand it on attach/resize), but GLFW cursor positions are in window
-// coordinates. On scaled displays those differ, so map the cursor into
-// framebuffer pixels before handing points to the runtime.
-void cursor_screen_point(GLFWwindow *window, double &x_screen,
-                         double &y_screen) {
-  double cursor_x = 0.0;
-  double cursor_y = 0.0;
-  glfwGetCursorPos(window, &cursor_x, &cursor_y);
-
-  int window_width = 0;
-  int window_height = 0;
-  glfwGetWindowSize(window, &window_width, &window_height);
-
-  int framebuffer_width = 0;
-  int framebuffer_height = 0;
-  glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
-
-  const double scale_x = window_width > 0
-                             ? static_cast<double>(framebuffer_width) /
-                                   static_cast<double>(window_width)
-                             : 1.0;
-  const double scale_y = window_height > 0
-                             ? static_cast<double>(framebuffer_height) /
-                                   static_cast<double>(window_height)
-                             : 1.0;
-  x_screen = cursor_x * scale_x;
-  y_screen = cursor_y * scale_y;
-}
-
-// Left click places a rectangle at the cursor; right/middle drag pans.
+// Left click hit-tests: on an item it reports the id, on empty space it places
+// a shape. Right/middle drag pans.
 void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
   auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
   if (!state || !state->runtime) {
@@ -93,7 +80,16 @@ void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
   if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
     double x_screen = 0.0;
     double y_screen = 0.0;
-    cursor_screen_point(window, x_screen, y_screen);
+    glfwGetCursorPos(window, &x_screen, &y_screen);
+
+    // Hit-test first: a click on an existing item reports its id; only a click
+    // on empty space places a new shape.
+    if (const VRTId hit =
+            state->runtime->hit_test(VRTScreenPoint{x_screen, y_screen})) {
+      std::fprintf(stderr, "[glfw-minimal] selected item id = %llu\n",
+                   static_cast<unsigned long long>(hit));
+      return;
+    }
 
     VRTWorldPoint world{};
     if (!state->runtime->screenToWorld(VRTScreenPoint{x_screen, y_screen},
@@ -115,8 +111,8 @@ void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
   if (button == GLFW_MOUSE_BUTTON_RIGHT || button == GLFW_MOUSE_BUTTON_MIDDLE) {
     if (action == GLFW_PRESS) {
       state->panning = true;
-      cursor_screen_point(window, state->last_pan_x_screen,
-                          state->last_pan_y_screen);
+      glfwGetCursorPos(window, &state->last_pan_x_screen,
+                       &state->last_pan_y_screen);
     } else if (action == GLFW_RELEASE) {
       state->panning = false;
     }
@@ -124,15 +120,12 @@ void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
 }
 
 // While a pan drag is active, translate cursor motion into a view pan.
-void cursor_moved(GLFWwindow *window, double /*x*/, double /*y*/) {
+void cursor_moved(GLFWwindow *window, double x_screen, double y_screen) {
   auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
   if (!state || !state->runtime || !state->panning) {
     return;
   }
 
-  double x_screen = 0.0;
-  double y_screen = 0.0;
-  cursor_screen_point(window, x_screen, y_screen);
   const double dx = x_screen - state->last_pan_x_screen;
   const double dy = y_screen - state->last_pan_y_screen;
   state->last_pan_x_screen = x_screen;
@@ -157,7 +150,7 @@ void scrolled(GLFWwindow *window, double /*x_offset*/, double y_offset) {
 
   double x_screen = 0.0;
   double y_screen = 0.0;
-  cursor_screen_point(window, x_screen, y_screen);
+  glfwGetCursorPos(window, &x_screen, &y_screen);
 
   VRTViewChange change{};
   change.flags = VRTViewChange_Zoom;
@@ -178,16 +171,11 @@ bool attach_wayland_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
     return false;
   }
 
-  int width = 0;
-  int height = 0;
-  glfwGetFramebufferSize(window, &width, &height);
-
   VRTSurfaceDescriptor surface{
       VRTSurfaceKind::LinuxWaylandSurface,
       display,
       reinterpret_cast<uintptr_t>(wayland_surface),
-      visual_runtime::metrics_1x(static_cast<uint32_t>(width),
-                                 static_cast<uint32_t>(height)),
+      surface_metrics(window),
   };
   std::fprintf(stderr,
                "[glfw-minimal] attaching LinuxWaylandSurface surface (%ux%u)\n",
@@ -212,16 +200,11 @@ bool attach_xcb_surface(GLFWwindow *window, VisualRuntimeModule &runtime) {
     return false;
   }
 
-  int width = 0;
-  int height = 0;
-  glfwGetFramebufferSize(window, &width, &height);
-
   VRTSurfaceDescriptor surface{
       VRTSurfaceKind::LinuxXcbWindow,
       connection,
       static_cast<uintptr_t>(x11_window),
-      visual_runtime::metrics_1x(static_cast<uint32_t>(width),
-                                 static_cast<uint32_t>(height)),
+      surface_metrics(window),
   };
   std::fprintf(stderr,
                "[glfw-minimal] attaching LinuxXcbWindow surface (%ux%u)\n",

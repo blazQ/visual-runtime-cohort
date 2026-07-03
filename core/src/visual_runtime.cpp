@@ -179,6 +179,12 @@ public:
     }
   }
 
+  VRTId hit_test(const VRTScreenPoint &screen_point){
+    VRTWorldPoint world{};
+    if (!view_state_.screen_to_world(screen_point, world)) return 0;
+    return scene_.item_at(glm::dvec2{world.x_world, world.y_world});
+  }
+
   void update(float dt) {
     elapsed_time_ += dt;
     if (renderer_.begin_frame(elapsed_time_)) {
@@ -299,6 +305,13 @@ void upsert_image(VRTState *state, const VRTImageDescriptor *image) {
   }
 }
 
+VRTId hit_test(VRTState *state, const VRTScreenPoint *point) {
+  if (auto *rt = runtime(state); rt && point){
+    return rt->hit_test(*point);
+  }
+  return VRTId{};
+}
+
 // Advance and render one runtime tick.
 void update(VRTState *state, float dt) {
   if (auto *rt = runtime(state)) {
@@ -325,6 +338,7 @@ const VRTAPI *visual_runtime_get_api() {
       api_callbacks::resize,       api_callbacks::set_scene_settings,
       api_callbacks::change_view,  api_callbacks::screen_to_world,
       api_callbacks::upsert_shape, api_callbacks::upsert_image,
+      api_callbacks::hit_test,
       api_callbacks::update,
       api_callbacks::shutdown,
   };
