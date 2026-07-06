@@ -19,18 +19,25 @@
 
 namespace {
 
+// Which item a left-click acts on, chosen with the number/letter keys.
+enum class Tool { PlaceRectangle, PlaceCircle, PlaceImage, Select };
+
 struct AppState {
   VisualRuntimeModule *runtime = nullptr;
+  Tool tool = Tool::PlaceCircle;
+  VRTId next_item_id = 1; // unique across shapes and images
+  VRTId selected_id = kInvalidId;
+  bool dragging = false;
   bool panning = false;
   double last_pan_x_screen = 0.0;
   double last_pan_y_screen = 0.0;
-  VRTId next_shape_id = 1;
 };
 
-// Zoom sensitivity applied per scroll notch, in log-scale units.
-constexpr double kZoomLogScalePerScrollStep = 0.15;
-// Side length of a placed rectangle, in world units.
-constexpr double kPlacedShapeSizeWorld = 0.2;
+constexpr double kZoomPerScrollStep = 0.15;
+constexpr double kPlacedSize = 0.2;
+constexpr VRTColorRGBA kPlacedColor{0.20f, 0.60f, 0.95f, 1.0f};
+constexpr uint32_t kImageSize = 64;
+constexpr uint32_t kImageCell = 8;
 
 void glfw_error(int code, const char *description) {
   std::fprintf(stderr, "[glfw-minimal] GLFW error %d: %s\n", code,
@@ -42,6 +49,7 @@ bool env_set(const char *name) {
   return value && value[0] != '\0';
 }
 
+// Pixel size drives the swapchain; logical screen size drives interaction.
 VRTSurfaceMetrics surface_metrics(GLFWwindow *window) {
   int pixel_width = 0;
   int pixel_height = 0;
@@ -59,52 +67,85 @@ VRTSurfaceMetrics surface_metrics(GLFWwindow *window) {
   };
 }
 
-void framebuffer_resized(GLFWwindow *window, int width, int height) {
-  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
-  if (!state || !state->runtime) {
+VRTScreenPoint cursor_point(GLFWwindow *window) {
+  double x = 0.0;
+  double y = 0.0;
+  glfwGetCursorPos(window, &x, &y);
+  return VRTScreenPoint{x, y};
+}
+
+std::vector<uint8_t> make_checkerboard(uint32_t size, uint32_t cell) {
+  std::vector<uint8_t> pixels(static_cast<size_t>(size) * size * 4);
+  for (uint32_t y = 0; y < size; ++y) {
+    for (uint32_t x = 0; x < size; ++x) {
+      const bool lit = ((x / cell) + (y / cell)) % 2 == 0;
+      uint8_t *p = &pixels[(static_cast<size_t>(y) * size + x) * 4];
+      p[0] = lit ? 235 : 40;
+      p[1] = lit ? 110 : 40;
+      p[2] = lit ? 45 : 40;
+      p[3] = 255;
+    }
+  }
+  return pixels;
+}
+
+// Drop a new shape or image at the cursor for the active place tool.
+void place_item(AppState &state, VRTScreenPoint at) {
+  VRTWorldPoint world{};
+  if (!state.runtime->screenToWorld(at, world)) {
+    return;
+  }
+  const VRTVec2 center{world.x_world, world.y_world};
+  const VRTVec2 size{kPlacedSize, kPlacedSize};
+
+  if (state.tool == Tool::PlaceImage) {
+    const std::vector<uint8_t> pixels = make_checkerboard(kImageSize, kImageCell);
+    state.runtime->upsertImage(VRTImageDescriptor{
+        state.next_item_id++, 0, center, size,
+        VRTPixelBuffer{pixels.data(), kImageSize, kImageSize,
+                       VRTPixelFormat::RGBA8Srgb}});
     return;
   }
 
-  state->runtime->resize(surface_metrics(window));
-  std::fprintf(stderr, "[glfw-minimal] resized to %dx%d\n", width, height);
+  const VRTShapeKind kind = state.tool == Tool::PlaceRectangle
+                                ? VRTShapeKind::Rectangle
+                                : VRTShapeKind::Circle;
+  state.runtime->upsertShape(VRTShapeDescriptor{
+      state.next_item_id++, kind, 0, center, size, kPlacedColor});
 }
 
-// Left click hit-tests: on an item it reports the id, on empty space it places
-// a shape. Right/middle drag pans.
+// Select whatever is under the cursor (a miss clears selection) and grab it.
+void select_at(AppState &state, VRTScreenPoint at) {
+  state.selected_id = state.runtime->hit_test(at);
+  state.runtime->set_selection(state.selected_id);
+  state.dragging = state.selected_id != kInvalidId;
+}
+
+void framebuffer_resized(GLFWwindow *window, int, int) {
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (state && state->runtime) {
+    state->runtime->resize(surface_metrics(window));
+  }
+}
+
+// Left button places/selects and drives item drags; right/middle drives panning.
 void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
   auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
   if (!state || !state->runtime) {
     return;
   }
 
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-    double x_screen = 0.0;
-    double y_screen = 0.0;
-    glfwGetCursorPos(window, &x_screen, &y_screen);
-
-    // Hit-test first: a click on an existing item reports its id; only a click
-    // on empty space places a new shape.
-    if (const VRTId hit =
-            state->runtime->hit_test(VRTScreenPoint{x_screen, y_screen})) {
-      std::fprintf(stderr, "[glfw-minimal] selected item id = %llu\n",
-                   static_cast<unsigned long long>(hit));
-      return;
+  if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (action == GLFW_PRESS) {
+      const VRTScreenPoint at = cursor_point(window);
+      if (state->tool == Tool::Select) {
+        select_at(*state, at);
+      } else {
+        place_item(*state, at);
+      }
+    } else if (action == GLFW_RELEASE) {
+      state->dragging = false;
     }
-
-    VRTWorldPoint world{};
-    if (!state->runtime->screenToWorld(VRTScreenPoint{x_screen, y_screen},
-                                       world)) {
-      return;
-    }
-
-    state->runtime->upsertShape(VRTShapeDescriptor{
-        state->next_shape_id++,
-        VRTShapeKind::Circle,
-        /*reserved=*/0,
-        VRTVec2{world.x_world, world.y_world},
-        VRTVec2{kPlacedShapeSizeWorld, kPlacedShapeSizeWorld},
-        VRTColorRGBA{0.20f, 0.60f, 0.95f, 1.0f},
-    });
     return;
   }
 
@@ -119,10 +160,22 @@ void mouse_button(GLFWwindow *window, int button, int action, int /*mods*/) {
   }
 }
 
-// While a pan drag is active, translate cursor motion into a view pan.
+// A drag moves the selected item; a pan drag moves the view.
 void cursor_moved(GLFWwindow *window, double x_screen, double y_screen) {
   auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
-  if (!state || !state->runtime || !state->panning) {
+  if (!state || !state->runtime) {
+    return;
+  }
+
+  if (state->dragging) {
+    VRTWorldPoint world{};
+    if (state->runtime->screenToWorld(VRTScreenPoint{x_screen, y_screen}, world)) {
+      state->runtime->move_item(state->selected_id, world);
+    }
+    return;
+  }
+
+  if (!state->panning) {
     return;
   }
 
@@ -147,17 +200,32 @@ void scrolled(GLFWwindow *window, double /*x_offset*/, double y_offset) {
   if (!state || !state->runtime || y_offset == 0.0) {
     return;
   }
-
-  double x_screen = 0.0;
-  double y_screen = 0.0;
-  glfwGetCursorPos(window, &x_screen, &y_screen);
+  const VRTScreenPoint at = cursor_point(window);
 
   VRTViewChange change{};
   change.flags = VRTViewChange_Zoom;
-  change.zoom_delta_log_scale = y_offset * kZoomLogScalePerScrollStep;
-  change.zoom_anchor_x_screen = x_screen;
-  change.zoom_anchor_y_screen = y_screen;
+  change.zoom_delta_log_scale = y_offset * kZoomPerScrollStep;
+  change.zoom_anchor_x_screen = at.x_screen;
+  change.zoom_anchor_y_screen = at.y_screen;
   state->runtime->changeView(change);
+}
+
+// 1/2/3 pick a place tool, S the select tool.
+void key_pressed(GLFWwindow *window, int key, int /*scancode*/, int action,
+                 int /*mods*/) {
+  if (action != GLFW_PRESS) {
+    return;
+  }
+  auto *state = static_cast<AppState *>(glfwGetWindowUserPointer(window));
+  if (!state) {
+    return;
+  }
+  switch (key) {
+  case GLFW_KEY_1: state->tool = Tool::PlaceRectangle; break;
+  case GLFW_KEY_2: state->tool = Tool::PlaceCircle;    break;
+  case GLFW_KEY_3: state->tool = Tool::PlaceImage;     break;
+  case GLFW_KEY_S: state->tool = Tool::Select;         break;
+  }
 }
 
 #if defined(__linux__)
@@ -309,6 +377,7 @@ int main() {
   glfwSetMouseButtonCallback(window, mouse_button);
   glfwSetCursorPosCallback(window, cursor_moved);
   glfwSetScrollCallback(window, scrolled);
+  glfwSetKeyCallback(window, key_pressed);
 
   if (!attach_surface(window, runtime)) {
     glfwDestroyWindow(window);
@@ -316,9 +385,6 @@ int main() {
     return 1;
   }
 
-  // Start with an empty canvas on a dark background; the scene is built by
-  // interaction: left-click to place a rectangle, scroll to zoom, right/middle
-  // drag to pan.
   runtime.setSceneSettings(
       VRTSceneSettings{VRTColorRGBA{0.09f, 0.10f, 0.12f, 1.0f}});
 
@@ -326,19 +392,15 @@ int main() {
   auto last = clock::now();
 
   while (!glfwWindowShouldClose(window)) {
-    if (runtime.reloadIfChanged()) {
-      std::printf("[host] reloaded\n");
-    }
+    runtime.reloadIfChanged();
 
-    auto now = clock::now();
-    float dt = std::chrono::duration<float>(now - last).count();
+    const auto now = clock::now();
+    const float dt = std::chrono::duration<float>(now - last).count();
     last = now;
 
     runtime.tick(dt);
     glfwPollEvents();
   }
-
-  std::printf("[glfw-minimal] exiting\n");
 
   runtime.shutdown();
   glfwDestroyWindow(window);
