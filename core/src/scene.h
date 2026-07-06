@@ -91,6 +91,12 @@ public:
     return find_by_id(images_, id);
   }
 
+  const WorldBounds *bounds_of(VRTId id) const {
+    if (const Shape *shape = find_shape(id)) return &shape->bounds;
+    if (const Image *image = find_image(id)) return &image->bounds;
+    return nullptr;
+  }
+
   const VRTColorRGBA &background_color() const {
     return scene_settings_.background_color;
   }

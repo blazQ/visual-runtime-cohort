@@ -82,6 +82,21 @@ Renderer::DrawableState image_state_for(const Image &image,
   };
 }
 
+// Selection box appearance.
+constexpr glm::vec4 kSelectionBoxColor{1.0f, 0.82f, 0.25f, 1.0f};
+// Box size relative to the item it frames,
+constexpr double kSelectionBoxScale = 1.12;
+
+Renderer::DrawableState selection_box_state_for(const WorldBounds &bounds) {
+  const WorldBounds framed{bounds.center_world,
+                           bounds.size_world * kSelectionBoxScale};
+  return Renderer::DrawableState{
+      model_transform_for(framed),
+      kSelectionBoxColor,
+      Renderer::PrimitiveKind::SelectionBox,
+  };
+}
+
 
 struct ImageEntry {
   VRTId id;
@@ -201,11 +216,31 @@ public:
         renderer_.draw(entry.drawable);
       }
 
+      draw_selection_box();
+
       renderer_.end_frame();
     }
   }
 
 private:
+  // Transient chrome: resolve the app-owned selection to bounds each frame and
+  // draw a box on top. An unknown or stale id resolves to nothing.
+  void draw_selection_box() {
+    if (selected_id_ == kInvalidId) {
+      return;
+    }
+    const WorldBounds *bounds = scene_.bounds_of(selected_id_);
+    if (!bounds) {
+      return;
+    }
+    if (selection_box_.value == 0) {
+      selection_box_ = renderer_.create_drawable(
+          {kQuadVertices.data(), kQuadVertices.size()});
+    }
+    renderer_.update_drawable(selection_box_, selection_box_state_for(*bounds));
+    renderer_.draw(selection_box_);
+  }
+
   Renderer::DrawableHandle *find_handle(VRTId id) {
     for (auto &entry : shape_handles_) {
       if (entry.first == id) {
@@ -235,6 +270,7 @@ private:
   Renderer renderer_;
   std::vector<std::pair<VRTId, Renderer::DrawableHandle>> shape_handles_;
   std::vector<ImageEntry> image_handles_;
+  Renderer::DrawableHandle selection_box_{};
   VRTId selected_id_ = kInvalidId;
   float elapsed_time_ = 0.0f;
 };

@@ -12,7 +12,15 @@ layout(location = 4) flat in uint frag_texture_index;
 layout(binding = 2) uniform sampler2D textures[];
 
 void main() {
-    
+
+    const float kSelectionBorderThickness = 0.03;
+    if (frag_shape_kind == 3u) {
+        float edge = max(abs(frag_local.x), abs(frag_local.y));
+        if (edge < 0.5 - kSelectionBorderThickness) discard;
+        out_color = frag_color;
+        return;
+    }
+
     if(frag_shape_kind == 2u && length(frag_local) > 0.5){
         discard;
     }

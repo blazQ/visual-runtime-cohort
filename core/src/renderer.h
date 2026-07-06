@@ -50,6 +50,7 @@ struct Renderer {
   enum class PrimitiveKind : uint32_t {
     Rectangle = 1,
     Circle = 2,
+    SelectionBox = 3,
   };
 
   struct DrawableState {
