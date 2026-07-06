@@ -26,7 +26,7 @@ struct WorldBounds {
 // Internal Shape: the visual runtime's C++ representation of one retained shape
 // after it crosses the C ABI boundary. Content only — no renderer state.
 struct Shape {
-  VRTId id = 0;
+  VRTId id = kInvalidId;
   VRTShapeKind kind = VRTShapeKind::Rectangle;
   WorldBounds bounds{};
   VRTColorRGBA color{};
@@ -38,7 +38,7 @@ struct Shape {
 };
 
 struct Image {
-  VRTId id = 0;
+  VRTId id = kInvalidId;
   WorldBounds bounds{};
 
   // For simplicity, on the Scene side, we don't care about the pixels of an image.
@@ -102,7 +102,7 @@ public:
       if (it->bounds.contains(world)) return it->id;
     for (auto it = shapes_.rbegin(); it != shapes_.rend(); ++it)
       if (it->bounds.contains(world)) return it->id;
-    return 0;
+    return kInvalidId;
   }
 
 
@@ -128,7 +128,7 @@ private:
   template <class T, class Descriptor>
   static Change upsert(std::vector<T> &items, const Descriptor &descriptor,
                        T (*make)(const Descriptor &)) {
-    if (descriptor.id == 0 || descriptor.reserved != 0) {
+    if (descriptor.id == kInvalidId || descriptor.reserved != 0) {
       return Change::Unchanged;
     }
     const T next = make(descriptor);

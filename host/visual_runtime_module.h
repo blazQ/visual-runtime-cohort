@@ -65,7 +65,12 @@ struct VisualRuntimeModule {
   VRTId hit_test(const VRTScreenPoint &screen) const {
     if (initialized_ && api_.hit_test)
       return api_.hit_test(&state_, &screen);
-    return VRTId{};
+    return kInvalidId;
+  }
+
+  void set_selection(VRTId id) const {
+    if (initialized_ && api_.set_selection)
+      api_.set_selection(&state_, id);
   }
 
   bool reloadIfChanged() {

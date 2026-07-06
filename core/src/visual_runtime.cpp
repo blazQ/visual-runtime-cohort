@@ -5,6 +5,7 @@
 #include "visual_runtime/types.h"
 
 #include <array>
+#include <cstdio>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -181,8 +182,12 @@ public:
 
   VRTId hit_test(const VRTScreenPoint &screen_point){
     VRTWorldPoint world{};
-    if (!view_state_.screen_to_world(screen_point, world)) return 0;
+    if (!view_state_.screen_to_world(screen_point, world)) return kInvalidId;
     return scene_.item_at(glm::dvec2{world.x_world, world.y_world});
+  }
+
+  void set_selection(VRTId id) {
+    selected_id_ = id;
   }
 
   void update(float dt) {
@@ -230,6 +235,7 @@ private:
   Renderer renderer_;
   std::vector<std::pair<VRTId, Renderer::DrawableHandle>> shape_handles_;
   std::vector<ImageEntry> image_handles_;
+  VRTId selected_id_ = kInvalidId;
   float elapsed_time_ = 0.0f;
 };
 
@@ -309,7 +315,13 @@ VRTId hit_test(VRTState *state, const VRTScreenPoint *point) {
   if (auto *rt = runtime(state); rt && point){
     return rt->hit_test(*point);
   }
-  return VRTId{};
+  return kInvalidId;
+}
+
+void set_selection(VRTState *state, VRTId id) {
+  if (auto *rt = runtime(state)) {
+    rt->set_selection(id);
+  }
 }
 
 // Advance and render one runtime tick.
@@ -338,7 +350,7 @@ const VRTAPI *visual_runtime_get_api() {
       api_callbacks::resize,       api_callbacks::set_scene_settings,
       api_callbacks::change_view,  api_callbacks::screen_to_world,
       api_callbacks::upsert_shape, api_callbacks::upsert_image,
-      api_callbacks::hit_test,
+      api_callbacks::hit_test,     api_callbacks::set_selection,
       api_callbacks::update,
       api_callbacks::shutdown,
   };

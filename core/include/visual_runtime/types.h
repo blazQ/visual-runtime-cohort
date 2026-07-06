@@ -51,6 +51,7 @@ struct VRTSurfaceDescriptor {
 // objects; it does not allocate ids or interpret their meaning. Zero is
 // reserved as an invalid id.
 using VRTId = uint64_t;
+constexpr VRTId kInvalidId = 0;
 
 struct VRTVec2 {
   double x;
