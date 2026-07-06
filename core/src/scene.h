@@ -97,6 +97,18 @@ public:
     return nullptr;
   }
 
+  bool move_item(VRTId id, glm::dvec2 center) {
+    if (Shape *shape = find_by_id(shapes_, id)) {
+      shape->bounds.center_world = center;
+      return true;
+    }
+    if (Image *image = find_by_id(images_, id)) {
+      image->bounds.center_world = center;
+      return true;
+    }
+    return false;
+  }
+
   const VRTColorRGBA &background_color() const {
     return scene_settings_.background_color;
   }

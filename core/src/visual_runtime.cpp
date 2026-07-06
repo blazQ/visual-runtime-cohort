@@ -205,6 +205,19 @@ public:
     selected_id_ = id;
   }
 
+  void move_item(VRTId id, const VRTWorldPoint &world) {
+    if (!scene_.move_item(id, {world.x_world, world.y_world})) {
+      return;
+    }
+    if (Renderer::DrawableHandle *handle = find_handle(id)) {
+      renderer_.update_drawable(*handle,
+                                drawable_state_for(*scene_.find_shape(id)));
+    } else if (ImageEntry *entry = find_image_handle(id)) {
+      renderer_.update_drawable(
+          entry->drawable, image_state_for(*scene_.find_image(id), entry->texture));
+    }
+  }
+
   void update(float dt) {
     elapsed_time_ += dt;
     if (renderer_.begin_frame(elapsed_time_)) {
@@ -360,6 +373,12 @@ void set_selection(VRTState *state, VRTId id) {
   }
 }
 
+void move_item(VRTState *state, VRTId id, const VRTWorldPoint *center) {
+  if (auto *rt = runtime(state); rt && center) {
+    rt->move_item(id, *center);
+  }
+}
+
 // Advance and render one runtime tick.
 void update(VRTState *state, float dt) {
   if (auto *rt = runtime(state)) {
@@ -387,6 +406,7 @@ const VRTAPI *visual_runtime_get_api() {
       api_callbacks::change_view,  api_callbacks::screen_to_world,
       api_callbacks::upsert_shape, api_callbacks::upsert_image,
       api_callbacks::hit_test,     api_callbacks::set_selection,
+      api_callbacks::move_item,
       api_callbacks::update,
       api_callbacks::shutdown,
   };

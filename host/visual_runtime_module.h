@@ -73,6 +73,11 @@ struct VisualRuntimeModule {
       api_.set_selection(&state_, id);
   }
 
+  void move_item(VRTId id, const VRTWorldPoint &center) const {
+    if (initialized_ && api_.move_item)
+      api_.move_item(&state_, id, &center);
+  }
+
   bool reloadIfChanged() {
     if (!lib_.changed())
       return false;
