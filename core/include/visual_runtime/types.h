@@ -95,7 +95,8 @@ struct VRTPixelBuffer {
 
 enum class VRTShapeKind : uint32_t {
   Rectangle = 1,
-  Circle = 2,
+  Circle,
+  RoundedBox,
 };
 
 // Product-shaped request to create or replace scene shape content. Positions

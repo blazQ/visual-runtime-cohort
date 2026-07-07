@@ -20,7 +20,7 @@
 namespace {
 
 // Which item a left-click acts on, chosen with the number/letter keys.
-enum class Tool { PlaceRectangle, PlaceCircle, PlaceImage, Select };
+enum class Tool { PlaceRectangle, PlaceCircle, PlaceRoundedBox, PlaceImage, Select };
 
 struct AppState {
   VisualRuntimeModule *runtime = nullptr;
@@ -89,6 +89,16 @@ std::vector<uint8_t> make_checkerboard(uint32_t size, uint32_t cell) {
   return pixels;
 }
 
+VRTShapeKind shape_kind_for(Tool tool) {
+  switch (tool) {
+  case Tool::PlaceCircle:     return VRTShapeKind::Circle;
+  case Tool::PlaceRoundedBox: return VRTShapeKind::RoundedBox;
+  case Tool::PlaceRectangle:
+  default:                    return VRTShapeKind::Rectangle;
+  }
+}
+
+
 // Drop a new shape or image at the cursor for the active place tool.
 void place_item(AppState &state, VRTScreenPoint at) {
   VRTWorldPoint world{};
@@ -107,9 +117,8 @@ void place_item(AppState &state, VRTScreenPoint at) {
     return;
   }
 
-  const VRTShapeKind kind = state.tool == Tool::PlaceRectangle
-                                ? VRTShapeKind::Rectangle
-                                : VRTShapeKind::Circle;
+  const VRTShapeKind kind = shape_kind_for(state.tool);
+
   state.runtime->upsertShape(VRTShapeDescriptor{
       state.next_item_id++, kind, 0, center, size, kPlacedColor});
 }
@@ -223,7 +232,8 @@ void key_pressed(GLFWwindow *window, int key, int /*scancode*/, int action,
   switch (key) {
   case GLFW_KEY_1: state->tool = Tool::PlaceRectangle; break;
   case GLFW_KEY_2: state->tool = Tool::PlaceCircle;    break;
-  case GLFW_KEY_3: state->tool = Tool::PlaceImage;     break;
+  case GLFW_KEY_3: state->tool = Tool::PlaceRoundedBox; break;
+  case GLFW_KEY_4: state->tool = Tool::PlaceImage;     break;
   case GLFW_KEY_S: state->tool = Tool::Select;         break;
   }
 }

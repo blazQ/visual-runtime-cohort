@@ -51,6 +51,7 @@ struct Renderer {
     Rectangle = 1,
     Circle = 2,
     SelectionBox = 3,
+    RoundedBox = 4,
   };
 
   struct DrawableState {

@@ -5,7 +5,6 @@
 #include "visual_runtime/types.h"
 
 #include <array>
-#include <cstdio>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
@@ -29,6 +28,8 @@ Renderer::PrimitiveKind primitive_kind_for(VRTShapeKind kind) {
     return Renderer::PrimitiveKind::Circle;
   case VRTShapeKind::Rectangle:
     return Renderer::PrimitiveKind::Rectangle;
+  case VRTShapeKind::RoundedBox:
+    return Renderer::PrimitiveKind::RoundedBox;
   }
   return Renderer::PrimitiveKind::Rectangle;
 }
