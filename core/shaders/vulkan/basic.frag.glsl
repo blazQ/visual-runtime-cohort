@@ -72,7 +72,12 @@ void main() {
         return;
     }
 
-    // Drop everything outside the boundary.
-    if (d > 0.0) discard;
-    out_color = shape_fill();
+    float alpha = 1.0;
+    if (frag_shape_kind != kKindRectangle) {
+        float w = 0.5 * fwidth(d);
+        // Smoothstep outside the boundary.
+        alpha = 1.0 - smoothstep(-w, w, d);
+    }
+    vec4 fill = shape_fill();
+    out_color = vec4(fill.rgb, fill.a * alpha);
 }
